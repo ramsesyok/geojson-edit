@@ -56,8 +56,9 @@ function interpolate(zoom: number, stops: [number, number][]): number {
   return last[1];
 }
 
-const COAST_WIDTH: [number, number][] = [[0, 2], [6, 6], [14, 9], [22, 18]];
-const BOUNDARY_WIDTH: [number, number][] = [[1, 1], [6, 2], [14, 6], [22, 12]];
+// Thinner than the MapLibre reference: its widths render too heavy in OL.
+const COAST_WIDTH: [number, number][] = [[0, 0.8], [6, 1.6], [14, 3], [22, 6]];
+const BOUNDARY_WIDTH: [number, number][] = [[1, 0.5], [6, 1], [14, 2.5], [22, 5]];
 
 // Reusable styles (widths/text updated per render; zoom is constant per frame).
 // zIndex enforces draw order within the single layer: fill < coast < boundary
