@@ -26,71 +26,6 @@
     {
       "type": "Feature",
       "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            139.767,
-            35.681
-          ],
-          [
-            135.5,
-            34.7
-          ]
-        ]
-      },
-      "properties": {
-        "name": "Tokyo - Osaka"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          139.767,
-          35.681
-        ]
-      },
-      "properties": {
-        "name": "Tokyo"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              2,
-              48.5
-            ],
-            [
-              2.8,
-              48.5
-            ],
-            [
-              2.8,
-              49
-            ],
-            [
-              2,
-              49
-            ],
-            [
-              2,
-              48.5
-            ]
-          ]
-        ]
-      },
-      "properties": {
-        "name": "Sample area"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
         "type": "Point",
         "coordinates": [
           52.9577465,
@@ -189,12 +124,16 @@
           ]
         ]
       },
-      "properties": null
+      "properties": {
+        "name": "大きい四角",
+        "category": "エリア",
+        "population": 12345
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "radius": 11144383.05
+        "radius": 4108121.07
       },
       "geometry": {
         "type": "Point",
@@ -202,6 +141,81 @@
           -71.4486136,
           25.7293077
         ]
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            148.3785087,
+            43.7249666
+          ],
+          [
+            144.9864832,
+            37.2079449
+          ],
+          [
+            136.4869249,
+            38.0723916
+          ],
+          [
+            130.7555714,
+            34.2331488
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Tokyo - Osaka"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.348752,
+          27.887599
+        ]
+      },
+      "properties": {
+        "name": "Tokyo"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.4934761,
+              47.1776525
+            ],
+            [
+              3.7592818,
+              47.6028328
+            ],
+            [
+              2.8,
+              49
+            ],
+            [
+              0.1864345,
+              49.0411377
+            ],
+            [
+              0.4934761,
+              47.1776525
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Sample area",
+        "population": 1000,
+        "visited": true
       }
     }
   ]

@@ -5,6 +5,8 @@
   "version": "0.0.1",
   "publisher": "local",
   "private": true,
+  "license": "MIT",
+  "categories": ["Visualization", "Other"],
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -22,26 +24,73 @@
         ],
         "priority": "default"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "geojson-edit.newFile",
+        "title": "GeoJSON Edit: 新規 GeoJSON を作成"
+      },
+      {
+        "command": "geojson-edit.openFieldSettings",
+        "title": "GeoJSON Edit: フィールド設定を開く"
+      }
+    ],
+    "configuration": {
+      "title": "GeoJSON Edit",
+      "properties": {
+        "geojson-edit.fields": {
+          "type": "array",
+          "scope": "resource",
+          "markdownDescription": "地物の `properties` として編集できるフィールド定義の一覧。",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["key", "type"],
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "プロパティのキー名"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["string", "number", "boolean", "enum"],
+                "default": "string",
+                "description": "入力の種類"
+              },
+              "label": {
+                "type": "string",
+                "description": "表示名(省略時はキー名)"
+              },
+              "options": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "type が enum のときの選択肢"
+              }
+            }
+          }
+        }
+      }
+    }
   },
   "scripts": {
     "build:webview": "vite build",
     "build:ext": "tsc -p ./tsconfig.json",
     "build": "npm run build:webview && npm run build:ext",
     "typecheck:webview": "tsc -p ./tsconfig.webview.json",
-    "watch:ext": "tsc -w -p ./tsconfig.json"
-  },
-  "dependencies": {
-    "ol": "^10.3.1",
-    "pmtiles": "^3.2.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "watch:ext": "tsc -w -p ./tsconfig.json",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "ol": "^10.3.1",
+    "pmtiles": "^3.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.4.0",
     "vite": "^5.4.0"
   }

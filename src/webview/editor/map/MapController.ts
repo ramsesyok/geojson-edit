@@ -8,6 +8,7 @@ import Snap from 'ol/interaction/Snap';
 import Select from 'ol/interaction/Select';
 import Translate from 'ol/interaction/Translate';
 import { unByKey } from 'ol/Observable';
+import { isEmpty } from 'ol/extent';
 import type { Interaction } from 'ol/interaction';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -33,16 +34,18 @@ export class MapController {
   private dynamicInteractions: Interaction[] = [];
   private clickKey: EventsKey | null = null;
   private selectKeys: EventsKey[] = [];
+  private currentSelect: Select | null = null;
 
   private applyingRemote = false;
   private lastText: string | null = null;
   private syncTimer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
+  private hasFitted = false;
 
   constructor(
     target: HTMLElement,
     pmtilesUri: string,
-    private readonly onSelectionChange?: (count: number) => void
+    private readonly onSelectionChange?: (feature: Feature | null) => void
   ) {
     const { layer, source } = createGeojsonLayer();
     this.overlayLayer = layer;
@@ -85,7 +88,8 @@ export class MapController {
       unByKey(k);
     }
     this.selectKeys = [];
-    this.onSelectionChange?.(0);
+    this.currentSelect = null;
+    this.onSelectionChange?.(null);
 
     if (tool === 'modify') {
       // Click to select a feature: it is highlighted and its vertices get ●
@@ -96,9 +100,10 @@ export class MapController {
         style: selectedStyle,
         hitTolerance: 6,
       });
+      this.currentSelect = select;
       const selected = select.getFeatures();
       this.selectKeys = selected.on(['add', 'remove'], () =>
-        this.onSelectionChange?.(selected.getLength())
+        this.onSelectionChange?.(selected.getLength() ? (selected.item(0) as Feature) : null)
       );
       // Translate = drag the whole feature to move it (parallel move).
       // Modify = drag a vertex. Modify is added after Translate so it wins near
@@ -138,9 +143,21 @@ export class MapController {
     this.lastText = text;
     this.applyingRemote = true;
     try {
+      // The old selected feature is about to be removed; drop the selection so
+      // the property panel doesn't hold a stale feature.
+      this.currentSelect?.getFeatures().clear();
       loadGeojsonText(this.source, text);
     } finally {
       this.applyingRemote = false;
+    }
+
+    // On the first load with data, zoom to the features' extent.
+    if (!this.hasFitted && this.source.getFeatures().length > 0) {
+      const extent = this.source.getExtent();
+      if (extent && !isEmpty(extent)) {
+        this.map.getView().fit(extent, { padding: [48, 48, 48, 48], maxZoom: 12 });
+        this.hasFitted = true;
+      }
     }
   }
 

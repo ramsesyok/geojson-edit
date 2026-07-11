@@ -70,3 +70,97 @@ body,
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
+
+.prop-panel {
+  position: absolute;
+  top: 52px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 10;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  font: 13px/1.4 sans-serif;
+  color: #d7dae0;
+  background: rgba(20, 22, 28, 0.95);
+  border: 1px solid #2b2f3a;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.prop-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #2b2f3a;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.prop-header .prop-geom {
+  font-weight: 400;
+  font-size: 11px;
+  color: #8b93a3;
+}
+
+.prop-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+.prop-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prop-row .prop-label {
+  font-size: 12px;
+  color: #a9b1c0;
+}
+
+.prop-row input[type='text'],
+.prop-row input[type='number'],
+.prop-row select {
+  width: 100%;
+  box-sizing: border-box;
+  font: 13px/1.2 sans-serif;
+  color: #eef1f6;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  padding: 5px 7px;
+}
+
+.prop-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  align-self: flex-start;
+}
+
+.prop-empty {
+  padding: 12px;
+  color: #a9b1c0;
+}
+
+.prop-settings,
+.prop-empty button {
+  margin-top: 6px;
+  font: 12px/1.2 sans-serif;
+  color: #d7dae0;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.prop-settings:hover,
+.prop-empty button:hover {
+  background: #2c303b;
+}

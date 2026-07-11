@@ -1,5 +1,11 @@
 {
     "workbench.editorAssociations": {
         "*.geojson": "geojson-edit.editor"
-    }
+    },
+    "geojson-edit.fields": [
+        { "key": "name", "type": "string", "label": "名称" },
+        { "key": "category", "type": "enum", "label": "分類", "options": ["都市", "経路", "エリア", "その他"] },
+        { "key": "population", "type": "number", "label": "人口" },
+        { "key": "visited", "type": "boolean", "label": "訪問済み" }
+    ]
 }

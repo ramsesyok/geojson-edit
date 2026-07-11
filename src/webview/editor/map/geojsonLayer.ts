@@ -119,10 +119,12 @@ export function selectedStyle(feature: FeatureLike): Style[] {
  * A GeoJSON Point whose properties carry a numeric `radius` is treated as a
  * circle (our storage convention for OL Circle geometries).
  */
-function isCircleFeature(feat: {
-  geometry?: { type?: string; coordinates?: unknown };
-  properties?: Record<string, unknown> | null;
-}): feat is { geometry: { type: 'Point'; coordinates: [number, number] }; properties: Record<string, unknown> } {
+function isCircleFeature(
+  feat: RawFeature
+): feat is RawFeature & {
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: Record<string, unknown>;
+} {
   return (
     feat?.geometry?.type === 'Point' &&
     Array.isArray(feat.geometry.coordinates) &&
@@ -131,21 +133,59 @@ function isCircleFeature(feat: {
   );
 }
 
+// --- Data preservation ------------------------------------------------------
+// Round-tripping should not silently drop information the editor doesn't touch.
+// `bbox` is intentionally not preserved because edits make it stale.
+const RESERVED_FEATURE_KEYS = new Set(['type', 'geometry', 'properties', 'id', 'bbox']);
+const RESERVED_TOP_KEYS = new Set(['type', 'features', 'bbox']);
+const TOP_EXTRAS_KEY = '_geojsonEditTopExtras';
+
+// Foreign members of each feature (anything beyond type/geometry/properties/id),
+// keyed by the OL feature so they survive edits without polluting properties.
+const featureExtras = new WeakMap<Feature, Record<string, unknown>>();
+
+function collectExtras(
+  obj: Record<string, unknown>,
+  reserved: Set<string>
+): Record<string, unknown> {
+  const extras: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (!reserved.has(k)) {
+      extras[k] = v;
+    }
+  }
+  return extras;
+}
+
+interface RawFeature {
+  type?: string;
+  geometry?: { type?: string; coordinates?: unknown };
+  properties?: Record<string, unknown> | null;
+  id?: string | number;
+  [k: string]: unknown;
+}
+
 /** Replace the overlay's features with those parsed from GeoJSON text. */
 export function loadGeojsonText(source: VectorSource, text: string): void {
   source.clear();
+  source.set(TOP_EXTRAS_KEY, {}, true);
   const trimmed = text.trim();
   if (!trimmed) {
     return;
   }
 
-  let json: { type?: string; features?: unknown[] };
+  let json: { type?: string; features?: unknown[] } & Record<string, unknown>;
   try {
     json = JSON.parse(trimmed);
   } catch (e) {
     // Partial / invalid JSON (e.g. mid-edit in a text editor) — skip rendering.
     console.warn('GeoJSON parse skipped:', e);
     return;
+  }
+
+  // Preserve top-level foreign members (name, crs, etc.).
+  if (json?.type === 'FeatureCollection') {
+    source.set(TOP_EXTRAS_KEY, collectExtras(json, RESERVED_TOP_KEYS), true);
   }
 
   const raw: unknown[] =
@@ -156,23 +196,30 @@ export function loadGeojsonText(source: VectorSource, text: string): void {
       : [];
 
   const olFeatures: Feature[] = [];
-  for (const feat of raw as Array<Parameters<typeof isCircleFeature>[0]>) {
+  for (const rawFeat of raw) {
+    const feat = rawFeat as RawFeature;
     try {
+      let olf: Feature;
       if (isCircleFeature(feat)) {
         const [lon, lat] = feat.geometry.coordinates;
         const center = fromLonLat([lon, lat]);
         const projRadius = metersToProjectedRadius(feat.properties.radius as number, center);
-        const cf = new Feature(new CircleGeom(center, projRadius));
-        cf.setProperties({ ...feat.properties });
-        olFeatures.push(cf);
+        olf = new Feature(new CircleGeom(center, projRadius));
+        olf.setProperties({ ...feat.properties });
       } else {
-        olFeatures.push(
-          format.readFeature(feat, {
-            dataProjection: DATA_PROJECTION,
-            featureProjection: VIEW_PROJECTION,
-          }) as Feature
-        );
+        olf = format.readFeature(feat, {
+          dataProjection: DATA_PROJECTION,
+          featureProjection: VIEW_PROJECTION,
+        }) as Feature;
       }
+      if (olf.getId() === undefined && feat.id !== undefined) {
+        olf.setId(feat.id);
+      }
+      const extras = collectExtras(feat, RESERVED_FEATURE_KEYS);
+      if (Object.keys(extras).length > 0) {
+        featureExtras.set(olf, extras);
+      }
+      olFeatures.push(olf);
     } catch (e) {
       console.warn('skip feature:', e);
     }
@@ -183,31 +230,44 @@ export function loadGeojsonText(source: VectorSource, text: string): void {
 /**
  * Serialize the overlay's features to pretty-printed GeoJSON text.
  * Circle geometries are written as a center Point + `radius` (meters).
+ * Feature ids and top-level / feature foreign members are preserved.
  */
 export function serializeGeojson(source: VectorSource): string {
+  const topExtras = (source.get(TOP_EXTRAS_KEY) as Record<string, unknown> | undefined) ?? {};
   const outFeatures: unknown[] = [];
+
   for (const f of source.getFeatures()) {
     const geom = f.getGeometry();
+    let featObj: Record<string, unknown>;
     if (geom instanceof CircleGeom) {
       const center = geom.getCenter();
       const [lon, lat] = toLonLat(center);
       const props: Record<string, unknown> = { ...f.getProperties() };
       delete props.geometry;
       props.radius = round(projectedRadiusToMeters(geom.getRadius(), center), 2);
-      outFeatures.push({
+      featObj = {
         type: 'Feature',
-        properties: props,
         geometry: { type: 'Point', coordinates: [round(lon, 7), round(lat, 7)] },
-      });
+        properties: props,
+      };
     } else if (geom) {
-      outFeatures.push(
-        format.writeFeatureObject(f, {
-          dataProjection: DATA_PROJECTION,
-          featureProjection: VIEW_PROJECTION,
-          decimals: 7,
-        })
-      );
+      featObj = format.writeFeatureObject(f, {
+        dataProjection: DATA_PROJECTION,
+        featureProjection: VIEW_PROJECTION,
+        decimals: 7,
+      }) as unknown as Record<string, unknown>;
+    } else {
+      continue;
     }
+
+    // Foreign members first, real fields win; then the id.
+    const merged: Record<string, unknown> = { ...(featureExtras.get(f) ?? {}), ...featObj };
+    const id = f.getId();
+    if (id !== undefined) {
+      merged.id = id;
+    }
+    outFeatures.push(merged);
   }
-  return JSON.stringify({ type: 'FeatureCollection', features: outFeatures }, null, 2);
+
+  return JSON.stringify({ type: 'FeatureCollection', ...topExtras, features: outFeatures }, null, 2);
 }

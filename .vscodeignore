@@ -1,0 +1,23 @@
+# Only ship the compiled extension host, the bundled webview, and the map data.
+.vscode/**
+.vscode-test/**
+src/**
+node_modules/**
+samples/**
+
+# Build config / sources
+**/*.ts
+!out/**/*.d.ts
+**/*.map
+tsconfig*.json
+vite.config.ts
+.gitignore
+.gitattributes
+
+# Docs kept out of the package
+VERIFY.md
+memory/**
+
+# Misc
+**/.DS_Store
+**/Thumbs.db

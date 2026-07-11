@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import type Feature from 'ol/Feature';
 import { MapController } from './map/MapController';
 import type { Tool } from './map/MapController';
 import { Toolbar } from './Toolbar';
+import { PropertyPanel } from './PropertyPanel';
 import { vscode } from './vscodeApi';
-import type { HostToWebview } from './vscodeApi';
+import type { FieldDef, HostToWebview } from './vscodeApi';
 
 export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<MapController | null>(null);
   const [tool, setTool] = useState<Tool>('modify');
-  const [editingCount, setEditingCount] = useState(0);
+  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [fields, setFields] = useState<FieldDef[]>([]);
 
   // Create the map + controller once.
   useEffect(() => {
@@ -17,13 +20,15 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
     if (!target) {
       return;
     }
-    const controller = new MapController(target, pmtilesUri, setEditingCount);
+    const controller = new MapController(target, pmtilesUri, setSelectedFeature);
     controllerRef.current = controller;
 
     const onMessage = (ev: MessageEvent): void => {
       const msg = ev.data as HostToWebview;
       if (msg.type === 'init' || msg.type === 'update') {
         controller.loadFromHost(msg.text);
+      } else if (msg.type === 'fields') {
+        setFields(msg.fields);
       }
     };
     window.addEventListener('message', onMessage);
@@ -43,13 +48,20 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
     controllerRef.current?.setTool(tool);
   }, [tool]);
 
+  const editing = tool === 'modify' && selectedFeature !== null;
+
   return (
     <>
       <Toolbar tool={tool} onToolChange={setTool} />
-      {tool === 'modify' && editingCount > 0 && (
-        <div className="status-badge">✏️ 編集中 — 空白部分をクリックで解除</div>
-      )}
+      {editing && <div className="status-badge">✏️ 編集中 — 空白部分をクリックで解除</div>}
       <div ref={mapDivRef} className="map" />
+      {editing && selectedFeature && (
+        <PropertyPanel
+          feature={selectedFeature}
+          fields={fields}
+          onOpenSettings={() => vscode.postMessage({ type: 'openFieldSettings' })}
+        />
+      )}
     </>
   );
 }

@@ -16,7 +16,7 @@ export default defineConfig({
   build: {
     outDir: 'out/webview',
     emptyOutDir: true,
-    minify: false,
+    minify: true,
     sourcemap: true,
     lib: {
       entry: resolve(__dirname, 'src/webview/editor/index.tsx'),
