@@ -2,12 +2,11 @@ import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTileSource from 'ol/source/VectorTile';
 import MVT from 'ol/format/MVT';
 import { createXYZ } from 'ol/tilegrid';
-import Style from 'ol/style/Style';
-import Stroke from 'ol/style/Stroke';
 import { PMTiles } from 'pmtiles';
 import type { Source, RangeResponse } from 'pmtiles';
 import type VectorTile from 'ol/VectorTile';
 import type RenderFeature from 'ol/render/Feature';
+import { basemapStyle, OCEAN_COLOR } from './basemapStyle';
 
 /**
  * pmtiles Source backed by an in-memory ArrayBuffer. The whole archive
@@ -26,8 +25,9 @@ class BufferSource implements Source {
 }
 
 /**
- * Load the bundled world.pmtiles and build a "simple outline only" basemap
- * layer (lines, no fill, no labels) for the given webview resource URI.
+ * Load the bundled world.pmtiles and build a basemap layer styled to match the
+ * MapLibre demotiles vector style (colored countries, coastline, boundaries,
+ * graticule, country labels) for the given webview resource URI.
  */
 export async function createBasemapLayer(pmtilesUri: string): Promise<VectorTileLayer> {
   const resp = await fetch(pmtilesUri);
@@ -38,7 +38,9 @@ export async function createBasemapLayer(pmtilesUri: string): Promise<VectorTile
   const pmtiles = new PMTiles(new BufferSource(buf, pmtilesUri));
   const header = await pmtiles.getHeader();
 
-  const mvt = new MVT();
+  // layerName exposes each feature's source-layer ("countries" / "geolines" /
+  // "centroids") as a property so the style function can branch on it.
+  const mvt = new MVT({ layerName: '__layer' });
   const source = new VectorTileSource({
     format: mvt,
     tileGrid: createXYZ({ maxZoom: header.maxZoom }),
@@ -71,6 +73,8 @@ export async function createBasemapLayer(pmtilesUri: string): Promise<VectorTile
 
   return new VectorTileLayer({
     source,
-    style: () => new Style({ stroke: new Stroke({ color: '#5b8def', width: 1 }) }),
+    style: basemapStyle,
+    background: OCEAN_COLOR,
+    declutter: true,
   });
 }
