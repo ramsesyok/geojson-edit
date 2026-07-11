@@ -1,0 +1,208 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.028169,
+          34.2351017
+        ]
+      },
+      "properties": null
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          107.8873239,
+          57.4597997
+        ]
+      },
+      "properties": null
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            139.767,
+            35.681
+          ],
+          [
+            135.5,
+            34.7
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Tokyo - Osaka"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          139.767,
+          35.681
+        ]
+      },
+      "properties": {
+        "name": "Tokyo"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2,
+              48.5
+            ],
+            [
+              2.8,
+              48.5
+            ],
+            [
+              2.8,
+              49
+            ],
+            [
+              2,
+              49
+            ],
+            [
+              2,
+              48.5
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Sample area"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          52.9577465,
+          59.0888606
+        ]
+      },
+      "properties": null
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            10.9859155,
+            61.1917351
+          ],
+          [
+            22.2535211,
+            12.7078617
+          ],
+          [
+            38.5915493,
+            -2.9599799
+          ],
+          [
+            49.5774648,
+            11.3303229
+          ],
+          [
+            63.4570312,
+            10.833306
+          ],
+          [
+            62.2820079,
+            -4.5733711
+          ],
+          [
+            75.7746479,
+            -21.0618236
+          ],
+          [
+            125.0704225,
+            20.5285076
+          ]
+        ]
+      },
+      "properties": null
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              56.436792,
+              71.741372
+            ],
+            [
+              25.3367077,
+              65.5124029
+            ],
+            [
+              40.5479754,
+              31.4600158
+            ],
+            [
+              106.7392573,
+              42.2131942
+            ],
+            [
+              132.3730601,
+              58.5224026
+            ],
+            [
+              123.9737717,
+              64.8103866
+            ],
+            [
+              114.9141725,
+              70.2656848
+            ],
+            [
+              87.871919,
+              74.7313605
+            ],
+            [
+              69.7851563,
+              70.3778539
+            ],
+            [
+              56.436792,
+              71.741372
+            ]
+          ]
+        ]
+      },
+      "properties": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "radius": 11144383.05
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -71.4486136,
+          25.7293077
+        ]
+      }
+    }
+  ]
+}

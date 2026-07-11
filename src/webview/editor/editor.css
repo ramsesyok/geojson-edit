@@ -1,0 +1,72 @@
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+#root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.map {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  background: #0b0f1a;
+}
+
+.toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(20, 22, 28, 0.9);
+  border: 1px solid #2b2f3a;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.toolbar .tool {
+  font: 13px/1.2 sans-serif;
+  color: #d7dae0;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toolbar .tool:hover {
+  background: #2c303b;
+}
+
+.toolbar .tool.active {
+  color: #ffffff;
+  background: #3b6fd4;
+  border-color: #5b8def;
+}
+
+.status-badge {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font: 13px/1.2 sans-serif;
+  color: #ffffff;
+  background: rgba(255, 61, 0, 0.92);
+  border: 1px solid #ff6d3d;
+  border-radius: 6px;
+  padding: 6px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}

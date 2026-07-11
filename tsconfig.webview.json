@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["react", "react-dom"]
+  },
+  "include": [
+    "src/webview/**/*.ts",
+    "src/webview/**/*.tsx",
+    "src/extension/protocol.ts"
+  ]
+}
