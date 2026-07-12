@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type Feature from 'ol/Feature';
 import type Point from 'ol/geom/Point';
 import type CircleGeom from 'ol/geom/Circle';
@@ -14,6 +14,12 @@ import {
   writePolygon,
 } from './map/coords';
 import type { LonLat } from './map/coords';
+
+/** Imperative surface used by the panel's single 更新 / 取消 buttons. */
+export interface CoordinateEditorHandle {
+  apply: () => void;
+  revert: () => void;
+}
 
 type StrLL = { lon: string; lat: string };
 
@@ -48,6 +54,31 @@ const buildLL = (rows: StrLL[]): LonLat[] | null => {
   return out;
 };
 
+/** True when the draft can be committed to a geometry. */
+function isValid(s: PanelState): boolean {
+  switch (s.kind) {
+    case 'point':
+      return parse(s.point.lon) !== null && parse(s.point.lat) !== null;
+    case 'circle': {
+      const r = parse(s.radiusM);
+      return (
+        parse(s.center.lon) !== null && parse(s.center.lat) !== null && r !== null && r > 0
+      );
+    }
+    case 'line': {
+      const b = buildLL(s.coords);
+      return b !== null && b.length >= 2;
+    }
+    case 'polygon':
+      return s.rings.every((r) => {
+        const b = buildLL(r);
+        return b !== null && b.length >= 3;
+      });
+    default:
+      return true;
+  }
+}
+
 function toPanel(feature: Feature): PanelState {
   const model = readCoords(feature.getGeometry());
   switch (model.kind) {
@@ -67,11 +98,9 @@ function toPanel(feature: Feature): PanelState {
 /** A pair of lon/lat number inputs. */
 function LonLatInputs({
   value,
-  onFocusChange,
   onChange,
 }: {
   value: StrLL;
-  onFocusChange: (typing: boolean) => void;
   onChange: (axis: 'lon' | 'lat', v: string) => void;
 }): JSX.Element {
   return (
@@ -82,8 +111,6 @@ function LonLatInputs({
           type="text"
           inputMode="decimal"
           value={value.lon}
-          onFocus={() => onFocusChange(true)}
-          onBlur={() => onFocusChange(false)}
           onChange={(e) => onChange('lon', e.target.value)}
         />
       </label>
@@ -93,8 +120,6 @@ function LonLatInputs({
           type="text"
           inputMode="decimal"
           value={value.lat}
-          onFocus={() => onFocusChange(true)}
-          onBlur={() => onFocusChange(false)}
           onChange={(e) => onChange('lat', e.target.value)}
         />
       </label>
@@ -107,7 +132,6 @@ function VertexTable({
   rings,
   minPerRing,
   isPolygon,
-  setTyping,
   onChange,
   onAdd,
   onRemove,
@@ -115,7 +139,6 @@ function VertexTable({
   rings: StrLL[][];
   minPerRing: number;
   isPolygon: boolean;
-  setTyping: (t: boolean) => void;
   onChange: (ri: number, vi: number, axis: 'lon' | 'lat', v: string) => void;
   onAdd: (ri: number) => void;
   onRemove: (ri: number, vi: number) => void;
@@ -128,11 +151,7 @@ function VertexTable({
           {ring.map((v, vi) => (
             <div key={vi} className="coord-vertex">
               <span className="coord-index">{vi + 1}</span>
-              <LonLatInputs
-                value={v}
-                onFocusChange={setTyping}
-                onChange={(axis, val) => onChange(ri, vi, axis, val)}
-              />
+              <LonLatInputs value={v} onChange={(axis, val) => onChange(ri, vi, axis, val)} />
               <button
                 type="button"
                 className="coord-del"
@@ -159,173 +178,184 @@ function VertexTable({
   );
 }
 
-export function CoordinateEditor({ feature }: { feature: Feature }): JSX.Element {
+export const CoordinateEditor = forwardRef<
+  CoordinateEditorHandle,
+  { feature: Feature; onDirtyChange?: (dirty: boolean, valid: boolean) => void }
+>(function CoordinateEditor({ feature, onDirtyChange }, ref): JSX.Element {
   const [state, setState] = useState<PanelState>(() => toPanel(feature));
-  // While true, ignore the geometry 'change' event we caused ourselves so the
-  // panel doesn't fight the value the user is typing.
+  // Guards the geometry 'change' we cause ourselves in apply() so it doesn't
+  // bounce back through the map-wins listener.
   const selfEdit = useRef(false);
-  // While an input is focused, don't overwrite it from map-driven changes.
-  const typing = useRef(false);
 
+  const report = (s: PanelState, dirty: boolean): void => {
+    onDirtyChange?.(dirty, isValid(s));
+  };
+
+  // Re-read when the selected feature changes.
   useEffect(() => {
-    setState(toPanel(feature));
+    const s = toPanel(feature);
+    setState(s);
+    report(s, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feature]);
 
-  // Map-driven edits (drag / modify / translate) mutate the geometry in place
-  // and fire 'change'; mirror those into the panel live.
+  // Map-driven edits win: mirror geometry changes into the panel and drop any
+  // unapplied draft. Skips the change we cause ourselves in apply().
   useEffect(() => {
     const geom = feature.getGeometry();
     if (!geom) {
       return;
     }
     const key = geom.on('change', () => {
-      if (selfEdit.current || typing.current) {
+      if (selfEdit.current) {
         return;
       }
-      setState(toPanel(feature));
+      const s = toPanel(feature);
+      setState(s);
+      report(s, false);
     });
     return () => unByKey(key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feature]);
 
-  const setTyping = (t: boolean): void => {
-    typing.current = t;
-    if (!t) {
-      // On blur, snap the fields back to the geometry: invalid/empty entries
-      // revert to the real value and numbers show in canonical form.
-      setState(toPanel(feature));
-    }
+  // A user edit updates the draft only; the map/file change on 更新.
+  const edit = (s: PanelState): void => {
+    setState(s);
+    report(s, true);
   };
-  const apply = (fn: () => void): void => {
-    selfEdit.current = true;
-    try {
-      fn();
-    } finally {
-      selfEdit.current = false;
-    }
-  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      apply: (): void => {
+        if (!isValid(state)) {
+          return;
+        }
+        selfEdit.current = true;
+        try {
+          const geom = feature.getGeometry();
+          switch (state.kind) {
+            case 'point':
+              writePoint(geom as Point, [parse(state.point.lon)!, parse(state.point.lat)!]);
+              break;
+            case 'circle':
+              writeCircleCenter(geom as CircleGeom, [
+                parse(state.center.lon)!,
+                parse(state.center.lat)!,
+              ]);
+              writeCircleRadius(geom as CircleGeom, parse(state.radiusM)!);
+              break;
+            case 'line':
+              writeLine(geom as LineString, buildLL(state.coords)!);
+              break;
+            case 'polygon':
+              writePolygon(
+                geom as Polygon,
+                state.rings.map((r) => buildLL(r)!) as LonLat[][]
+              );
+              break;
+            default:
+              break;
+          }
+        } finally {
+          selfEdit.current = false;
+        }
+        report(state, false);
+      },
+      revert: (): void => {
+        const s = toPanel(feature);
+        setState(s);
+        report(s, false);
+      },
+    }),
+    // Recreate so apply()/revert() see the latest draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, feature]
+  );
 
   let body: JSX.Element;
   if (state.kind === 'point') {
-    const geom = feature.getGeometry() as Point;
     const onChange = (axis: 'lon' | 'lat', v: string): void => {
-      const next = { ...state.point, [axis]: v };
-      setState({ kind: 'point', point: next });
-      const lon = parse(next.lon);
-      const lat = parse(next.lat);
-      if (lon !== null && lat !== null) {
-        apply(() => writePoint(geom, [lon, lat]));
-      }
+      edit({ kind: 'point', point: { ...state.point, [axis]: v } });
     };
-    body = <LonLatInputs value={state.point} onFocusChange={setTyping} onChange={onChange} />;
+    body = <LonLatInputs value={state.point} onChange={onChange} />;
   } else if (state.kind === 'circle') {
-    const geom = feature.getGeometry() as CircleGeom;
     const onCenter = (axis: 'lon' | 'lat', v: string): void => {
-      const next = { ...state.center, [axis]: v };
-      setState({ ...state, center: next });
-      const lon = parse(next.lon);
-      const lat = parse(next.lat);
-      if (lon !== null && lat !== null) {
-        apply(() => writeCircleCenter(geom, [lon, lat]));
-      }
+      edit({ ...state, center: { ...state.center, [axis]: v } });
     };
     const onRadius = (v: string): void => {
-      setState({ ...state, radiusM: v });
-      const m = parse(v);
-      if (m !== null && m > 0) {
-        apply(() => writeCircleRadius(geom, m));
-      }
+      edit({ ...state, radiusM: v });
     };
     body = (
       <>
         <div className="coord-sub">中心</div>
-        <LonLatInputs value={state.center} onFocusChange={setTyping} onChange={onCenter} />
+        <LonLatInputs value={state.center} onChange={onCenter} />
         <label className="coord-axis coord-radius">
           <span>半径 (m)</span>
           <input
             type="text"
             inputMode="decimal"
             value={state.radiusM}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
             onChange={(e) => onRadius(e.target.value)}
           />
         </label>
       </>
     );
   } else if (state.kind === 'line') {
-    const geom = feature.getGeometry() as LineString;
-    const commit = (coords: StrLL[]): void => {
-      const built = buildLL(coords);
-      if (built && built.length >= 2) {
-        apply(() => writeLine(geom, built));
-      }
-    };
     const onChange = (_ri: number, vi: number, axis: 'lon' | 'lat', v: string): void => {
-      const coords = state.coords.map((c, i) => (i === vi ? { ...c, [axis]: v } : c));
-      setState({ kind: 'line', coords });
-      commit(coords);
+      edit({ kind: 'line', coords: state.coords.map((c, i) => (i === vi ? { ...c, [axis]: v } : c)) });
     };
     const onAdd = (): void => {
       const last = state.coords[state.coords.length - 1] ?? { lon: '0', lat: '0' };
-      const coords = [...state.coords, { ...last }];
-      setState({ kind: 'line', coords });
-      commit(coords);
+      edit({ kind: 'line', coords: [...state.coords, { ...last }] });
     };
     const onRemove = (_ri: number, vi: number): void => {
       if (state.coords.length <= 2) {
         return;
       }
-      const coords = state.coords.filter((_, i) => i !== vi);
-      setState({ kind: 'line', coords });
-      commit(coords);
+      edit({ kind: 'line', coords: state.coords.filter((_, i) => i !== vi) });
     };
     body = (
       <VertexTable
         rings={[state.coords]}
         minPerRing={2}
         isPolygon={false}
-        setTyping={setTyping}
         onChange={onChange}
         onAdd={onAdd}
         onRemove={onRemove}
       />
     );
   } else if (state.kind === 'polygon') {
-    const geom = feature.getGeometry() as Polygon;
-    const commit = (rings: StrLL[][]): void => {
-      const built = rings.map(buildLL);
-      if (built.every((r) => r !== null && r.length >= 3)) {
-        apply(() => writePolygon(geom, built as LonLat[][]));
-      }
-    };
     const onChange = (ri: number, vi: number, axis: 'lon' | 'lat', v: string): void => {
-      const rings = state.rings.map((r, i) =>
-        i === ri ? r.map((c, j) => (j === vi ? { ...c, [axis]: v } : c)) : r
-      );
-      setState({ kind: 'polygon', rings });
-      commit(rings);
+      edit({
+        kind: 'polygon',
+        rings: state.rings.map((r, i) =>
+          i === ri ? r.map((c, j) => (j === vi ? { ...c, [axis]: v } : c)) : r
+        ),
+      });
     };
     const onAdd = (ri: number): void => {
       const ring = state.rings[ri];
       const last = ring[ring.length - 1] ?? { lon: '0', lat: '0' };
-      const rings = state.rings.map((r, i) => (i === ri ? [...r, { ...last }] : r));
-      setState({ kind: 'polygon', rings });
-      commit(rings);
+      edit({
+        kind: 'polygon',
+        rings: state.rings.map((r, i) => (i === ri ? [...r, { ...last }] : r)),
+      });
     };
     const onRemove = (ri: number, vi: number): void => {
       if (state.rings[ri].length <= 3) {
         return;
       }
-      const rings = state.rings.map((r, i) => (i === ri ? r.filter((_, j) => j !== vi) : r));
-      setState({ kind: 'polygon', rings });
-      commit(rings);
+      edit({
+        kind: 'polygon',
+        rings: state.rings.map((r, i) => (i === ri ? r.filter((_, j) => j !== vi) : r)),
+      });
     };
     body = (
       <VertexTable
         rings={state.rings}
         minPerRing={3}
         isPolygon
-        setTyping={setTyping}
         onChange={onChange}
         onAdd={onAdd}
         onRemove={onRemove}
@@ -341,4 +371,4 @@ export function CoordinateEditor({ feature }: { feature: Feature }): JSX.Element
       {body}
     </div>
   );
-}
+});

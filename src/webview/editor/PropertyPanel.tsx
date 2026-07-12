@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type Feature from 'ol/Feature';
 import type { FieldDef } from './vscodeApi';
 import { CoordinateEditor } from './CoordinateEditor';
+import type { CoordinateEditorHandle } from './CoordinateEditor';
 
 type FieldValue = string | boolean;
 
@@ -73,26 +74,64 @@ function FieldInput({
 export function PropertyPanel({
   feature,
   fields,
+  mapDirty,
+  onCommit,
+  onRevert,
   onOpenSettings,
 }: {
   feature: Feature;
   fields: FieldDef[];
+  mapDirty: boolean;
+  onCommit: () => void;
+  onRevert: () => void;
   onOpenSettings: () => void;
 }): JSX.Element {
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
     readValues(feature, fields)
   );
+  const [propsDirty, setPropsDirty] = useState(false);
+  const [coord, setCoord] = useState<{ dirty: boolean; valid: boolean }>({
+    dirty: false,
+    valid: true,
+  });
+  const coordRef = useRef<CoordinateEditorHandle>(null);
 
   // Refresh when the selected feature or the field definitions change.
   useEffect(() => {
     setValues(readValues(feature, fields));
+    setPropsDirty(false);
   }, [feature, fields]);
 
   const geomType = feature.getGeometry()?.getType() ?? '';
 
+  // Edits update the draft only; nothing reaches the map/file until 更新.
   const change = (f: FieldDef, raw: FieldValue): void => {
     setValues((v) => ({ ...v, [f.key]: raw }));
-    applyToFeature(feature, f, raw);
+    setPropsDirty(true);
+  };
+
+  const dirty = propsDirty || coord.dirty || mapDirty;
+  const canApply = dirty && coord.valid;
+
+  const applyAll = (): void => {
+    // Write the panel drafts into the feature, then let the controller commit
+    // the whole draft (incl. map edits) and sync to the host.
+    for (const f of fields) {
+      applyToFeature(feature, f, values[f.key] ?? '');
+    }
+    coordRef.current?.apply();
+    onCommit();
+    // Reflect what was actually stored (drops invalid numbers, normalizes text).
+    setValues(readValues(feature, fields));
+    setPropsDirty(false);
+  };
+
+  const revertAll = (): void => {
+    // Restore the geometry (map draft), then reset the panel drafts.
+    onRevert();
+    coordRef.current?.revert();
+    setValues(readValues(feature, fields));
+    setPropsDirty(false);
   };
 
   return (
@@ -102,7 +141,11 @@ export function PropertyPanel({
         <span className="prop-geom">{geomType}</span>
       </div>
       <div className="prop-body">
-        <CoordinateEditor feature={feature} />
+        <CoordinateEditor
+          ref={coordRef}
+          feature={feature}
+          onDirtyChange={(d, v) => setCoord({ dirty: d, valid: v })}
+        />
         {fields.length === 0 ? (
           <div className="prop-empty">
             <p>編集できるフィールドが未定義です。</p>
@@ -123,6 +166,31 @@ export function PropertyPanel({
             </button>
           </div>
         )}
+      </div>
+      <div className="prop-actions">
+        <span className={dirty ? 'prop-status dirty' : 'prop-status'}>
+          {dirty ? '未確定の変更' : '同期済み'}
+        </span>
+        <div className="prop-actions-btns">
+          <button
+            type="button"
+            className="prop-btn-cancel"
+            disabled={!dirty}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={revertAll}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="prop-btn-apply"
+            disabled={!canApply}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={applyAll}
+          >
+            更新
+          </button>
+        </div>
       </div>
     </div>
   );

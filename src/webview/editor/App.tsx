@@ -12,6 +12,7 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
   const controllerRef = useRef<MapController | null>(null);
   const [tool, setTool] = useState<Tool>('modify');
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [mapDirty, setMapDirty] = useState(false);
   const [fields, setFields] = useState<FieldDef[]>([]);
 
   // Create the map + controller once.
@@ -20,7 +21,7 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
     if (!target) {
       return;
     }
-    const controller = new MapController(target, pmtilesUri, setSelectedFeature);
+    const controller = new MapController(target, pmtilesUri, setSelectedFeature, setMapDirty);
     controllerRef.current = controller;
 
     const onMessage = (ev: MessageEvent): void => {
@@ -63,6 +64,9 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
         <PropertyPanel
           feature={selectedFeature}
           fields={fields}
+          mapDirty={mapDirty}
+          onCommit={() => controllerRef.current?.commitEdit()}
+          onRevert={() => controllerRef.current?.revertEdit()}
           onOpenSettings={() => vscode.postMessage({ type: 'openFieldSettings' })}
         />
       )}
