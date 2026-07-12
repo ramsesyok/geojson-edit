@@ -1,7 +1,7 @@
 import type { Tool } from './map/MapController';
 
 const TOOLS: { id: Tool; label: string; title: string }[] = [
-  { id: 'modify', label: '✏️ 編集', title: '地物をクリックで選択 → 頂点●ドラッグで編集 / 本体ドラッグで平行移動 / 円のふちでリサイズ' },
+  { id: 'modify', label: '✏️ 編集', title: '地物をクリックで選択 → 頂点●ドラッグで編集 / Shift+ドラッグで平行移動 / 円のふちでリサイズ / Alt+クリックで頂点削除' },
   { id: 'Point', label: '• 点', title: '点(Point)を描く' },
   { id: 'LineString', label: '╱ 線', title: '線(PolyLine)を描く — ダブルクリックで終了' },
   { id: 'Polygon', label: '▰ 面', title: 'ポリゴンを描く — ダブルクリックで終了' },

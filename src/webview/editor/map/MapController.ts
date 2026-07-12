@@ -9,6 +9,7 @@ import Select from 'ol/interaction/Select';
 import Translate from 'ol/interaction/Translate';
 import { unByKey } from 'ol/Observable';
 import { isEmpty } from 'ol/extent';
+import { altKeyOnly, primaryAction, shiftKeyOnly, singleClick } from 'ol/events/condition';
 import type { Interaction } from 'ol/interaction';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -71,8 +72,27 @@ export class MapController {
       this.onSourceChanged
     );
 
+    window.addEventListener('keydown', this.onKeyDown);
+
     this.setTool('modify');
   }
+
+  // Esc ends editing by clearing the selection (same as clicking empty space).
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape') {
+      return;
+    }
+    // Don't hijack Esc while the user is typing in the property panel.
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+      return;
+    }
+    const features = this.currentSelect?.getFeatures();
+    if (features && features.getLength() > 0) {
+      features.clear();
+      e.preventDefault();
+    }
+  };
 
   /** Switch the active editing tool. */
   setTool(tool: Tool): void {
@@ -99,17 +119,30 @@ export class MapController {
         layers: [this.overlayLayer],
         style: selectedStyle,
         hitTolerance: 6,
+        // Reserve Alt+click for vertex deletion so it doesn't change selection.
+        condition: (e) => singleClick(e) && !altKeyOnly(e),
       });
       this.currentSelect = select;
       const selected = select.getFeatures();
-      this.selectKeys = selected.on(['add', 'remove'], () =>
-        this.onSelectionChange?.(selected.getLength() ? (selected.item(0) as Feature) : null)
-      );
-      // Translate = drag the whole feature to move it (parallel move).
-      // Modify = drag a vertex. Modify is added after Translate so it wins near
-      // vertices; dragging the body falls through to Translate.
-      const translate = new Translate({ features: selected });
-      const modify = new Modify({ features: selected });
+
+      // Shift+drag translates the whole feature (all geometry types). Requiring
+      // Shift unifies the move gesture and prevents accidental plain-drag moves.
+      const translate = new Translate({ features: selected, condition: shiftKeyOnly });
+      // Plain drag edits vertices / resizes a circle; Shift-drags are left to
+      // Translate. Alt+click on a vertex deletes it.
+      const modify = new Modify({
+        features: selected,
+        condition: (e) => primaryAction(e) && !shiftKeyOnly(e),
+        deleteCondition: (e) => altKeyOnly(e) && singleClick(e),
+      });
+
+      this.selectKeys = selected.on(['add', 'remove'], () => {
+        const feature = selected.getLength() ? (selected.item(0) as Feature) : null;
+        // A Point has no editable vertices — its only "edit" is moving it. Keep
+        // Modify off for points so they, too, move only with Shift+drag.
+        modify.setActive(!!feature && feature.getGeometry()?.getType() !== 'Point');
+        this.onSelectionChange?.(feature);
+      });
       const snap = new Snap({ source: this.source });
       this.map.addInteraction(select);
       this.map.addInteraction(translate);
@@ -163,6 +196,7 @@ export class MapController {
 
   dispose(): void {
     this.disposed = true;
+    window.removeEventListener('keydown', this.onKeyDown);
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
     }
