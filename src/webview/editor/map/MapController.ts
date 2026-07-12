@@ -7,12 +7,17 @@ import Modify from 'ol/interaction/Modify';
 import Snap from 'ol/interaction/Snap';
 import Select from 'ol/interaction/Select';
 import Translate from 'ol/interaction/Translate';
+import CircleGeom from 'ol/geom/Circle';
 import { unByKey } from 'ol/Observable';
 import { isEmpty } from 'ol/extent';
 import { altKeyOnly, primaryAction, shiftKeyOnly, singleClick } from 'ol/events/condition';
 import type { Interaction } from 'ol/interaction';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
+import type { VectorSourceEvent } from 'ol/source/Vector';
+import type Geometry from 'ol/geom/Geometry';
+import type SimpleGeometry from 'ol/geom/SimpleGeometry';
+import type BaseEvent from 'ol/events/Event';
 import type { EventsKey } from 'ol/events';
 import { createBasemapLayer } from './basemap';
 import { createGeojsonLayer, loadGeojsonText, selectedStyle, serializeGeojson } from './geojsonLayer';
@@ -44,10 +49,20 @@ export class MapController {
   private hasFitted = false;
   private clipboardFeature: Feature | null = null;
 
+  // Deferred editing: while a feature is selected, its map + panel edits are a
+  // draft that is not written to the host until commitEdit(). committedGeom is
+  // the last-committed geometry used to revert on 取消 / deselect.
+  private selectedFeature: Feature | null = null;
+  private committedGeom: Geometry | null = null;
+  private editDirty = false;
+  private reverting = false;
+  private committing = false;
+
   constructor(
     target: HTMLElement,
     pmtilesUri: string,
-    private readonly onSelectionChange?: (feature: Feature | null) => void
+    private readonly onSelectionChange?: (feature: Feature | null) => void,
+    private readonly onEditDirtyChange?: (dirty: boolean) => void
   ) {
     const { layer, source } = createGeojsonLayer();
     this.overlayLayer = layer;
@@ -155,6 +170,14 @@ export class MapController {
     this.currentSelect = null;
     this.onSelectionChange?.(null);
 
+    // Switching tools ends the current selection; discard its uncommitted draft.
+    if (this.selectedFeature && this.editDirty && !this.applyingRemote) {
+      this.revertGeometry(this.selectedFeature);
+    }
+    this.selectedFeature = null;
+    this.committedGeom = null;
+    this.setEditDirty(false);
+
     if (tool === 'modify') {
       // Click to select a feature: it is highlighted and its vertices get ●
       // handles; only the selected feature is editable. Clicking empty space
@@ -182,6 +205,7 @@ export class MapController {
 
       this.selectKeys = selected.on(['add', 'remove'], () => {
         const feature = selected.getLength() ? (selected.item(0) as Feature) : null;
+        this.onSelectionSwitched(feature);
         // A Point has no editable vertices — its only "edit" is moving it. Keep
         // Modify off for points so they, too, move only with Shift+drag.
         modify.setActive(!!feature && feature.getGeometry()?.getType() !== 'Point');
@@ -254,17 +278,101 @@ export class MapController {
     this.map.setTarget(undefined);
   }
 
-  private onSourceChanged = (): void => {
-    if (this.applyingRemote) {
-      return; // change came from the host; do not echo it back
+  // --- Deferred editing of the selected feature ------------------------------
+
+  /** Commit the selected feature's draft (map + panel edits) and sync to host. */
+  commitEdit(): void {
+    if (!this.selectedFeature) {
+      return;
     }
+    this.committing = true;
+    try {
+      this.committedGeom = this.selectedFeature.getGeometry()?.clone() ?? null;
+    } finally {
+      this.committing = false;
+    }
+    this.setEditDirty(false);
+    this.syncNow();
+  }
+
+  /** Discard the selected feature's uncommitted map edits (revert to snapshot). */
+  revertEdit(): void {
+    if (this.selectedFeature) {
+      this.revertGeometry(this.selectedFeature);
+    }
+  }
+
+  /** Snapshot the newly selected feature; revert the one we're leaving if dirty. */
+  private onSelectionSwitched(next: Feature | null): void {
+    if (this.selectedFeature && this.selectedFeature !== next && this.editDirty && !this.applyingRemote) {
+      // Leaving a feature (deselect / switch) discards its uncommitted edits.
+      this.revertGeometry(this.selectedFeature);
+    }
+    this.selectedFeature = next;
+    this.committedGeom = next?.getGeometry()?.clone() ?? null;
+    this.setEditDirty(false);
+  }
+
+  /** Copy the committed geometry back into the live feature (no host sync). */
+  private revertGeometry(feature: Feature): void {
+    const snap = this.committedGeom;
+    const geom = feature.getGeometry();
+    if (!snap || !geom) {
+      return;
+    }
+    this.reverting = true;
+    try {
+      if (geom instanceof CircleGeom && snap instanceof CircleGeom) {
+        geom.setCenterAndRadius(snap.getCenter(), snap.getRadius());
+      } else {
+        const coords = (snap as SimpleGeometry).getCoordinates();
+        if (coords) {
+          (geom as SimpleGeometry).setCoordinates(coords);
+        }
+      }
+    } finally {
+      this.reverting = false;
+    }
+    this.setEditDirty(false);
+  }
+
+  private setEditDirty(dirty: boolean): void {
+    if (this.editDirty !== dirty) {
+      this.editDirty = dirty;
+      this.onEditDirtyChange?.(dirty);
+    }
+  }
+
+  private onSourceChanged = (evt: BaseEvent | Event): void => {
+    const e = evt as unknown as VectorSourceEvent;
+    if (this.applyingRemote || this.reverting) {
+      return; // remote load or our own revert — never echo
+    }
+    if (e.type === 'changefeature' && e.feature === this.selectedFeature && !this.committing) {
+      // A draft edit of the selected feature: hold the sync until 更新.
+      this.setEditDirty(true);
+      return;
+    }
+    this.scheduleSync();
+  };
+
+  private scheduleSync(): void {
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
     }
-    this.syncTimer = setTimeout(() => {
-      const text = serializeGeojson(this.source);
-      this.lastText = text;
-      vscode.postMessage({ type: 'edit', text });
-    }, SYNC_DEBOUNCE_MS);
-  };
+    this.syncTimer = setTimeout(() => this.syncNow(), SYNC_DEBOUNCE_MS);
+  }
+
+  private syncNow(): void {
+    if (this.syncTimer) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = undefined;
+    }
+    if (this.disposed) {
+      return;
+    }
+    const text = serializeGeojson(this.source);
+    this.lastText = text;
+    vscode.postMessage({ type: 'edit', text });
+  }
 }

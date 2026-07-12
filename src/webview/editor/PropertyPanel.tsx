@@ -74,10 +74,16 @@ function FieldInput({
 export function PropertyPanel({
   feature,
   fields,
+  mapDirty,
+  onCommit,
+  onRevert,
   onOpenSettings,
 }: {
   feature: Feature;
   fields: FieldDef[];
+  mapDirty: boolean;
+  onCommit: () => void;
+  onRevert: () => void;
   onOpenSettings: () => void;
 }): JSX.Element {
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
@@ -104,23 +110,28 @@ export function PropertyPanel({
     setPropsDirty(true);
   };
 
-  const dirty = propsDirty || coord.dirty;
+  const dirty = propsDirty || coord.dirty || mapDirty;
   const canApply = dirty && coord.valid;
 
   const applyAll = (): void => {
+    // Write the panel drafts into the feature, then let the controller commit
+    // the whole draft (incl. map edits) and sync to the host.
     for (const f of fields) {
       applyToFeature(feature, f, values[f.key] ?? '');
     }
     coordRef.current?.apply();
+    onCommit();
     // Reflect what was actually stored (drops invalid numbers, normalizes text).
     setValues(readValues(feature, fields));
     setPropsDirty(false);
   };
 
   const revertAll = (): void => {
+    // Restore the geometry (map draft), then reset the panel drafts.
+    onRevert();
+    coordRef.current?.revert();
     setValues(readValues(feature, fields));
     setPropsDirty(false);
-    coordRef.current?.revert();
   };
 
   return (
