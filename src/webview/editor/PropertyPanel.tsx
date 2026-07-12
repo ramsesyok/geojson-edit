@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type Feature from 'ol/Feature';
 import type { FieldDef } from './vscodeApi';
+import { CoordinateEditor } from './CoordinateEditor';
 
 type FieldValue = string | boolean;
 
@@ -100,26 +101,29 @@ export function PropertyPanel({
         <span>プロパティ</span>
         <span className="prop-geom">{geomType}</span>
       </div>
-      {fields.length === 0 ? (
-        <div className="prop-empty">
-          <p>編集できるフィールドが未定義です。</p>
-          <button type="button" onClick={onOpenSettings}>
-            フィールド設定を開く
-          </button>
-        </div>
-      ) : (
-        <div className="prop-fields">
-          {fields.map((f) => (
-            <label key={f.key} className="prop-row">
-              <span className="prop-label">{f.label ?? f.key}</span>
-              <FieldInput field={f} value={values[f.key] ?? ''} onChange={(raw) => change(f, raw)} />
-            </label>
-          ))}
-          <button type="button" className="prop-settings" onClick={onOpenSettings}>
-            フィールド設定を開く
-          </button>
-        </div>
-      )}
+      <div className="prop-body">
+        <CoordinateEditor feature={feature} />
+        {fields.length === 0 ? (
+          <div className="prop-empty">
+            <p>編集できるフィールドが未定義です。</p>
+            <button type="button" onClick={onOpenSettings}>
+              フィールド設定を開く
+            </button>
+          </div>
+        ) : (
+          <div className="prop-fields">
+            {fields.map((f) => (
+              <label key={f.key} className="prop-row">
+                <span className="prop-label">{f.label ?? f.key}</span>
+                <FieldInput field={f} value={values[f.key] ?? ''} onChange={(raw) => change(f, raw)} />
+              </label>
+            ))}
+            <button type="button" className="prop-settings" onClick={onOpenSettings}>
+              フィールド設定を開く
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

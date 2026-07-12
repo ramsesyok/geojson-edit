@@ -105,12 +105,154 @@ body,
   color: #8b93a3;
 }
 
+.prop-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .prop-fields {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  overflow-y: auto;
+}
+
+/* --- Coordinate editor ---------------------------------------------------- */
+
+.coord-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2b2f3a;
+}
+
+.coord-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a9b1c0;
+}
+
+.coord-sub {
+  font-size: 11px;
+  color: #8b93a3;
+  margin-top: 2px;
+}
+
+.coord-pair {
+  display: flex;
+  gap: 6px;
+}
+
+.coord-axis {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.coord-axis > span {
+  font-size: 11px;
+  color: #8b93a3;
+}
+
+.coord-radius {
+  margin-top: 4px;
+}
+
+.coord-editor input {
+  width: 100%;
+  box-sizing: border-box;
+  font: 12px/1.2 sans-serif;
+  color: #eef1f6;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.coord-editor input[readonly] {
+  color: #a9b1c0;
+  background: #1c1f27;
+}
+
+.coord-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.coord-ring {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coord-vertex {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.coord-index {
+  flex: 0 0 auto;
+  width: 18px;
+  text-align: right;
+  font-size: 11px;
+  color: #8b93a3;
+  padding-bottom: 5px;
+}
+
+.coord-vertex .coord-pair {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.coord-del {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 26px;
+  margin-bottom: 1px;
+  font: 14px/1 sans-serif;
+  color: #d7dae0;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.coord-del:hover:not(:disabled) {
+  color: #ffffff;
+  background: #6b2b2b;
+  border-color: #a23b3b;
+}
+
+.coord-del:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.coord-add {
+  align-self: flex-start;
+  margin-top: 2px;
+  font: 12px/1.2 sans-serif;
+  color: #d7dae0;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.coord-add:hover {
+  background: #2c303b;
+}
+
+.coord-note {
+  font-size: 12px;
+  color: #a9b1c0;
 }
 
 .prop-row {
