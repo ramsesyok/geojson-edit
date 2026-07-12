@@ -9,7 +9,7 @@ import Select from 'ol/interaction/Select';
 import Translate from 'ol/interaction/Translate';
 import { unByKey } from 'ol/Observable';
 import { isEmpty } from 'ol/extent';
-import { altKeyOnly, singleClick } from 'ol/events/condition';
+import { altKeyOnly, primaryAction, shiftKeyOnly, singleClick } from 'ol/events/condition';
 import type { Interaction } from 'ol/interaction';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -110,12 +110,14 @@ export class MapController {
       );
       // Translate = drag the whole feature to move it (parallel move).
       // Modify = drag a vertex. Modify is added after Translate so it wins near
-      // vertices; dragging the body falls through to Translate.
+      // vertices; a plain drag on a polygon interior falls through to Translate.
       const translate = new Translate({ features: selected });
-      // Alt+click on a vertex deletes it (OL default; set explicitly for clarity).
-      // OL keeps the geometry valid (line >= 2 points, polygon ring >= 3).
+      // Modify ignores Shift-drags so that Shift+drag translates the whole
+      // feature — needed for polylines, whose body-drag is otherwise consumed by
+      // Modify (segment vertex insertion). Alt+click on a vertex deletes it.
       const modify = new Modify({
         features: selected,
+        condition: (e) => primaryAction(e) && !shiftKeyOnly(e),
         deleteCondition: (e) => altKeyOnly(e) && singleClick(e),
       });
       const snap = new Snap({ source: this.source });
