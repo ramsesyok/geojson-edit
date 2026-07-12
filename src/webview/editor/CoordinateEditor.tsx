@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import type Feature from 'ol/Feature';
 import type Point from 'ol/geom/Point';
 import type CircleGeom from 'ol/geom/Circle';
+import type LineString from 'ol/geom/LineString';
+import type Polygon from 'ol/geom/Polygon';
 import { unByKey } from 'ol/Observable';
-import { readCoords, writeCircleCenter, writeCircleRadius, writePoint } from './map/coords';
+import {
+  readCoords,
+  writeCircleCenter,
+  writeCircleRadius,
+  writeLine,
+  writePoint,
+  writePolygon,
+} from './map/coords';
 import type { LonLat } from './map/coords';
 
 type StrLL = { lon: string; lat: string };
@@ -25,6 +34,20 @@ const parse = (s: string): number | null => {
   return s.trim() !== '' && Number.isFinite(n) ? n : null;
 };
 
+/** Parse a list of string lon/lat pairs; null if any field is invalid. */
+const buildLL = (rows: StrLL[]): LonLat[] | null => {
+  const out: LonLat[] = [];
+  for (const r of rows) {
+    const lon = parse(r.lon);
+    const lat = parse(r.lat);
+    if (lon === null || lat === null) {
+      return null;
+    }
+    out.push([lon, lat]);
+  }
+  return out;
+};
+
 function toPanel(feature: Feature): PanelState {
   const model = readCoords(feature.getGeometry());
   switch (model.kind) {
@@ -44,14 +67,12 @@ function toPanel(feature: Feature): PanelState {
 /** A pair of lon/lat number inputs. */
 function LonLatInputs({
   value,
-  readOnly,
   onFocusChange,
   onChange,
 }: {
   value: StrLL;
-  readOnly?: boolean;
-  onFocusChange?: (typing: boolean) => void;
-  onChange?: (axis: 'lon' | 'lat', v: string) => void;
+  onFocusChange: (typing: boolean) => void;
+  onChange: (axis: 'lon' | 'lat', v: string) => void;
 }): JSX.Element {
   return (
     <div className="coord-pair">
@@ -61,10 +82,9 @@ function LonLatInputs({
           type="text"
           inputMode="decimal"
           value={value.lon}
-          readOnly={readOnly}
-          onFocus={() => onFocusChange?.(true)}
-          onBlur={() => onFocusChange?.(false)}
-          onChange={(e) => onChange?.('lon', e.target.value)}
+          onFocus={() => onFocusChange(true)}
+          onBlur={() => onFocusChange(false)}
+          onChange={(e) => onChange('lon', e.target.value)}
         />
       </label>
       <label className="coord-axis">
@@ -73,12 +93,62 @@ function LonLatInputs({
           type="text"
           inputMode="decimal"
           value={value.lat}
-          readOnly={readOnly}
-          onFocus={() => onFocusChange?.(true)}
-          onBlur={() => onFocusChange?.(false)}
-          onChange={(e) => onChange?.('lat', e.target.value)}
+          onFocus={() => onFocusChange(true)}
+          onBlur={() => onFocusChange(false)}
+          onChange={(e) => onChange('lat', e.target.value)}
         />
       </label>
+    </div>
+  );
+}
+
+/** Editable vertex table shared by LineString (one ring) and Polygon (rings). */
+function VertexTable({
+  rings,
+  minPerRing,
+  isPolygon,
+  setTyping,
+  onChange,
+  onAdd,
+  onRemove,
+}: {
+  rings: StrLL[][];
+  minPerRing: number;
+  isPolygon: boolean;
+  setTyping: (t: boolean) => void;
+  onChange: (ri: number, vi: number, axis: 'lon' | 'lat', v: string) => void;
+  onAdd: (ri: number) => void;
+  onRemove: (ri: number, vi: number) => void;
+}): JSX.Element {
+  return (
+    <div className="coord-list">
+      {rings.map((ring, ri) => (
+        <div key={ri} className="coord-ring">
+          {isPolygon && <div className="coord-sub">{ri === 0 ? '外周' : `穴 ${ri}`}</div>}
+          {ring.map((v, vi) => (
+            <div key={vi} className="coord-vertex">
+              <span className="coord-index">{vi + 1}</span>
+              <LonLatInputs
+                value={v}
+                onFocusChange={setTyping}
+                onChange={(axis, val) => onChange(ri, vi, axis, val)}
+              />
+              <button
+                type="button"
+                className="coord-del"
+                title="頂点を削除"
+                disabled={ring.length <= minPerRing}
+                onClick={() => onRemove(ri, vi)}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button type="button" className="coord-add" onClick={() => onAdd(ri)}>
+            ＋ 頂点を追加
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -171,25 +241,84 @@ export function CoordinateEditor({ feature }: { feature: Feature }): JSX.Element
         </label>
       </>
     );
-  } else if (state.kind === 'line' || state.kind === 'polygon') {
-    // Editable tables land in the next step; show the vertices read-only for now.
-    const rings = state.kind === 'line' ? [state.coords] : state.rings;
+  } else if (state.kind === 'line') {
+    const geom = feature.getGeometry() as LineString;
+    const commit = (coords: StrLL[]): void => {
+      const built = buildLL(coords);
+      if (built && built.length >= 2) {
+        apply(() => writeLine(geom, built));
+      }
+    };
+    const onChange = (_ri: number, vi: number, axis: 'lon' | 'lat', v: string): void => {
+      const coords = state.coords.map((c, i) => (i === vi ? { ...c, [axis]: v } : c));
+      setState({ kind: 'line', coords });
+      commit(coords);
+    };
+    const onAdd = (): void => {
+      const last = state.coords[state.coords.length - 1] ?? { lon: '0', lat: '0' };
+      const coords = [...state.coords, { ...last }];
+      setState({ kind: 'line', coords });
+      commit(coords);
+    };
+    const onRemove = (_ri: number, vi: number): void => {
+      if (state.coords.length <= 2) {
+        return;
+      }
+      const coords = state.coords.filter((_, i) => i !== vi);
+      setState({ kind: 'line', coords });
+      commit(coords);
+    };
     body = (
-      <div className="coord-list">
-        {rings.map((ring, ri) => (
-          <div key={ri} className="coord-ring">
-            {state.kind === 'polygon' && (
-              <div className="coord-sub">{ri === 0 ? '外周' : `穴 ${ri}`}</div>
-            )}
-            {ring.map((v, vi) => (
-              <div key={vi} className="coord-vertex">
-                <span className="coord-index">{vi + 1}</span>
-                <LonLatInputs value={v} readOnly />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      <VertexTable
+        rings={[state.coords]}
+        minPerRing={2}
+        isPolygon={false}
+        setTyping={setTyping}
+        onChange={onChange}
+        onAdd={onAdd}
+        onRemove={onRemove}
+      />
+    );
+  } else if (state.kind === 'polygon') {
+    const geom = feature.getGeometry() as Polygon;
+    const commit = (rings: StrLL[][]): void => {
+      const built = rings.map(buildLL);
+      if (built.every((r) => r !== null && r.length >= 3)) {
+        apply(() => writePolygon(geom, built as LonLat[][]));
+      }
+    };
+    const onChange = (ri: number, vi: number, axis: 'lon' | 'lat', v: string): void => {
+      const rings = state.rings.map((r, i) =>
+        i === ri ? r.map((c, j) => (j === vi ? { ...c, [axis]: v } : c)) : r
+      );
+      setState({ kind: 'polygon', rings });
+      commit(rings);
+    };
+    const onAdd = (ri: number): void => {
+      const ring = state.rings[ri];
+      const last = ring[ring.length - 1] ?? { lon: '0', lat: '0' };
+      const rings = state.rings.map((r, i) => (i === ri ? [...r, { ...last }] : r));
+      setState({ kind: 'polygon', rings });
+      commit(rings);
+    };
+    const onRemove = (ri: number, vi: number): void => {
+      if (state.rings[ri].length <= 3) {
+        return;
+      }
+      const rings = state.rings.map((r, i) => (i === ri ? r.filter((_, j) => j !== vi) : r));
+      setState({ kind: 'polygon', rings });
+      commit(rings);
+    };
+    body = (
+      <VertexTable
+        rings={state.rings}
+        minPerRing={3}
+        isPolygon
+        setTyping={setTyping}
+        onChange={onChange}
+        onAdd={onAdd}
+        onRemove={onRemove}
+      />
     );
   } else {
     body = <div className="coord-note">{state.type} は地図上で編集してください。</div>;
