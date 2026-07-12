@@ -9,6 +9,7 @@ import Select from 'ol/interaction/Select';
 import Translate from 'ol/interaction/Translate';
 import { unByKey } from 'ol/Observable';
 import { isEmpty } from 'ol/extent';
+import { altKeyOnly, singleClick } from 'ol/events/condition';
 import type { Interaction } from 'ol/interaction';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -99,6 +100,8 @@ export class MapController {
         layers: [this.overlayLayer],
         style: selectedStyle,
         hitTolerance: 6,
+        // Reserve Alt+click for vertex deletion so it doesn't change selection.
+        condition: (e) => singleClick(e) && !altKeyOnly(e),
       });
       this.currentSelect = select;
       const selected = select.getFeatures();
@@ -109,7 +112,12 @@ export class MapController {
       // Modify = drag a vertex. Modify is added after Translate so it wins near
       // vertices; dragging the body falls through to Translate.
       const translate = new Translate({ features: selected });
-      const modify = new Modify({ features: selected });
+      // Alt+click on a vertex deletes it (OL default; set explicitly for clarity).
+      // OL keeps the geometry valid (line >= 2 points, polygon ring >= 3).
+      const modify = new Modify({
+        features: selected,
+        deleteCondition: (e) => altKeyOnly(e) && singleClick(e),
+      });
       const snap = new Snap({ source: this.source });
       this.map.addInteraction(select);
       this.map.addInteraction(translate);

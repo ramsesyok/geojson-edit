@@ -53,7 +53,9 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
   return (
     <>
       <Toolbar tool={tool} onToolChange={setTool} />
-      {editing && <div className="status-badge">✏️ 編集中 — 空白部分をクリックで解除</div>}
+      {editing && (
+        <div className="status-badge">✏️ 編集中 — Alt+クリックで頂点削除 / 空白をクリックで解除</div>
+      )}
       <div ref={mapDivRef} className="map" />
       {editing && selectedFeature && (
         <PropertyPanel
