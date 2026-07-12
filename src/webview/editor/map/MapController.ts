@@ -105,20 +105,24 @@ export class MapController {
       });
       this.currentSelect = select;
       const selected = select.getFeatures();
-      this.selectKeys = selected.on(['add', 'remove'], () =>
-        this.onSelectionChange?.(selected.getLength() ? (selected.item(0) as Feature) : null)
-      );
-      // Translate = drag the whole feature to move it (parallel move).
-      // Modify = drag a vertex. Modify is added after Translate so it wins near
-      // vertices; a plain drag on a polygon interior falls through to Translate.
-      const translate = new Translate({ features: selected });
-      // Modify ignores Shift-drags so that Shift+drag translates the whole
-      // feature — needed for polylines, whose body-drag is otherwise consumed by
-      // Modify (segment vertex insertion). Alt+click on a vertex deletes it.
+
+      // Shift+drag translates the whole feature (all geometry types). Requiring
+      // Shift unifies the move gesture and prevents accidental plain-drag moves.
+      const translate = new Translate({ features: selected, condition: shiftKeyOnly });
+      // Plain drag edits vertices / resizes a circle; Shift-drags are left to
+      // Translate. Alt+click on a vertex deletes it.
       const modify = new Modify({
         features: selected,
         condition: (e) => primaryAction(e) && !shiftKeyOnly(e),
         deleteCondition: (e) => altKeyOnly(e) && singleClick(e),
+      });
+
+      this.selectKeys = selected.on(['add', 'remove'], () => {
+        const feature = selected.getLength() ? (selected.item(0) as Feature) : null;
+        // A Point has no editable vertices — its only "edit" is moving it. Keep
+        // Modify off for points so they, too, move only with Shift+drag.
+        modify.setActive(!!feature && feature.getGeometry()?.getType() !== 'Point');
+        this.onSelectionChange?.(feature);
       });
       const snap = new Snap({ source: this.source });
       this.map.addInteraction(select);
