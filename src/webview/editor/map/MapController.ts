@@ -72,8 +72,27 @@ export class MapController {
       this.onSourceChanged
     );
 
+    window.addEventListener('keydown', this.onKeyDown);
+
     this.setTool('modify');
   }
+
+  // Esc ends editing by clearing the selection (same as clicking empty space).
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape') {
+      return;
+    }
+    // Don't hijack Esc while the user is typing in the property panel.
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+      return;
+    }
+    const features = this.currentSelect?.getFeatures();
+    if (features && features.getLength() > 0) {
+      features.clear();
+      e.preventDefault();
+    }
+  };
 
   /** Switch the active editing tool. */
   setTool(tool: Tool): void {
@@ -177,6 +196,7 @@ export class MapController {
 
   dispose(): void {
     this.disposed = true;
+    window.removeEventListener('keydown', this.onKeyDown);
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
     }
