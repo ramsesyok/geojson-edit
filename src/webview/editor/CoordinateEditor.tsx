@@ -138,13 +138,19 @@ function VertexTable({
                 className="coord-del"
                 title="頂点を削除"
                 disabled={ring.length <= minPerRing}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onRemove(ri, vi)}
               >
                 ×
               </button>
             </div>
           ))}
-          <button type="button" className="coord-add" onClick={() => onAdd(ri)}>
+          <button
+            type="button"
+            className="coord-add"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onAdd(ri)}
+          >
             ＋ 頂点を追加
           </button>
         </div>
@@ -183,6 +189,11 @@ export function CoordinateEditor({ feature }: { feature: Feature }): JSX.Element
 
   const setTyping = (t: boolean): void => {
     typing.current = t;
+    if (!t) {
+      // On blur, snap the fields back to the geometry: invalid/empty entries
+      // revert to the real value and numbers show in canonical form.
+      setState(toPanel(feature));
+    }
   };
   const apply = (fn: () => void): void => {
     selfEdit.current = true;
