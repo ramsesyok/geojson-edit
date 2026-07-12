@@ -109,7 +109,12 @@ export class MapController {
   private copySelected(): void {
     const selected = this.currentSelect?.getFeatures().item(0) as Feature | undefined;
     if (selected) {
-      this.clipboardFeature = selected.clone();
+      const clone = selected.clone();
+      // clone() copies the current per-feature style, which for a selected
+      // feature is the Select highlight. Clear it so the pasted feature uses the
+      // layer style and can actually be deselected.
+      clone.setStyle(undefined);
+      this.clipboardFeature = clone;
     }
   }
 
