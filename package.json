@@ -2,7 +2,7 @@
   "name": "geojson-edit",
   "displayName": "GeoJSON Edit (offline)",
   "description": "Offline / air-gapped GeoJSON editor with an embedded PMTiles basemap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local",
   "private": true,
   "license": "MIT",
