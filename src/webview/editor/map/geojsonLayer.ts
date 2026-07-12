@@ -29,23 +29,24 @@ const round = (n: number, decimals: number): number => {
   return Math.round(n * f) / f;
 };
 
-// Bold, saturated colors so drawn features stay visible on the light
-// (pastel) demotiles basemap.
+// Blue-family colors for drawn features: visible on the light (pastel)
+// demotiles basemap and clearly distinct from the red-orange selection
+// highlight (#ff3d00).
 const pointStyle = new Style({
   image: new CircleStyle({
     radius: 6,
-    fill: new Fill({ color: '#d81b60' }),
+    fill: new Fill({ color: '#1565c0' }),
     stroke: new Stroke({ color: '#ffffff', width: 2 }),
   }),
 });
-const lineStyle = new Style({ stroke: new Stroke({ color: '#6a1b9a', width: 3 }) });
+const lineStyle = new Style({ stroke: new Stroke({ color: '#1976d2', width: 3 }) });
 const polygonStyle = new Style({
-  stroke: new Stroke({ color: '#00695c', width: 2.5 }),
-  fill: new Fill({ color: 'rgba(0, 105, 92, 0.18)' }),
+  stroke: new Stroke({ color: '#0d47a1', width: 2.5 }),
+  fill: new Fill({ color: 'rgba(13, 71, 161, 0.18)' }),
 });
 const circleStyle = new Style({
-  stroke: new Stroke({ color: '#e65100', width: 2.5 }),
-  fill: new Fill({ color: 'rgba(230, 81, 0, 0.15)' }),
+  stroke: new Stroke({ color: '#0277bd', width: 2.5 }),
+  fill: new Fill({ color: 'rgba(2, 119, 189, 0.15)' }),
 });
 
 function styleFn(feature: FeatureLike): Style {
