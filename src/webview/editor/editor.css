@@ -111,6 +111,67 @@ body,
   overflow-y: auto;
 }
 
+/* --- Apply / cancel footer ------------------------------------------------ */
+
+.prop-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #2b2f3a;
+  background: rgba(20, 22, 28, 0.95);
+}
+
+.prop-status {
+  font-size: 11px;
+  color: #8b93a3;
+}
+
+.prop-status.dirty {
+  color: #ffb74d;
+}
+
+.prop-actions-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.prop-btn-apply,
+.prop-btn-cancel {
+  font: 12px/1.2 sans-serif;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.prop-btn-apply {
+  color: #ffffff;
+  background: #3b6fd4;
+  border: 1px solid #5b8def;
+}
+
+.prop-btn-apply:hover:not(:disabled) {
+  background: #4a7ce0;
+}
+
+.prop-btn-cancel {
+  color: #d7dae0;
+  background: #23262f;
+  border: 1px solid #333844;
+}
+
+.prop-btn-cancel:hover:not(:disabled) {
+  background: #2c303b;
+}
+
+.prop-btn-apply:disabled,
+.prop-btn-cancel:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .prop-fields {
   display: flex;
   flex-direction: column;
