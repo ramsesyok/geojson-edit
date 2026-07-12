@@ -42,6 +42,7 @@ export class MapController {
   private syncTimer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
   private hasFitted = false;
+  private clipboardFeature: Feature | null = null;
 
   constructor(
     target: HTMLElement,
@@ -77,22 +78,60 @@ export class MapController {
     this.setTool('modify');
   }
 
-  // Esc ends editing by clearing the selection (same as clicking empty space).
+  // Esc ends editing; Ctrl/Cmd+C copies the selected feature; Ctrl/Cmd+V pastes
+  // a duplicate. Ignored while typing in the property panel.
   private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.key !== 'Escape') {
-      return;
-    }
-    // Don't hijack Esc while the user is typing in the property panel.
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
       return;
     }
-    const features = this.currentSelect?.getFeatures();
-    if (features && features.getLength() > 0) {
-      features.clear();
+
+    if (e.key === 'Escape') {
+      const features = this.currentSelect?.getFeatures();
+      if (features && features.getLength() > 0) {
+        features.clear();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    const modifier = e.ctrlKey || e.metaKey;
+    if (modifier && (e.key === 'c' || e.key === 'C')) {
+      this.copySelected();
+      e.preventDefault();
+    } else if (modifier && (e.key === 'v' || e.key === 'V')) {
+      this.pasteClipboard();
       e.preventDefault();
     }
   };
+
+  /** Copy the currently selected feature into the in-editor clipboard. */
+  private copySelected(): void {
+    const selected = this.currentSelect?.getFeatures().item(0) as Feature | undefined;
+    if (selected) {
+      this.clipboardFeature = selected.clone();
+    }
+  }
+
+  /** Paste a duplicate of the clipboard feature, offset a bit from the original. */
+  private pasteClipboard(): void {
+    if (!this.clipboardFeature) {
+      return;
+    }
+    const copy = this.clipboardFeature.clone();
+    copy.setId(undefined); // avoid duplicate ids
+    // Offset by ~24px in the current view so the copy doesn't overlap exactly.
+    const d = 24 * (this.map.getView().getResolution() ?? 1);
+    copy.getGeometry()?.translate(d, -d);
+    this.source.addFeature(copy); // fires addfeature -> edit sync
+
+    // Select the pasted feature when in edit mode.
+    const selected = this.currentSelect?.getFeatures();
+    if (selected) {
+      selected.clear();
+      selected.push(copy);
+    }
+  }
 
   /** Switch the active editing tool. */
   setTool(tool: Tool): void {
