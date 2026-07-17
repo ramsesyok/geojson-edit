@@ -15,7 +15,7 @@ import {
 } from './map/coords';
 import type { LonLat } from './map/coords';
 
-/** Imperative surface used by the panel's single 更新 / 取消 buttons. */
+/** Imperative surface used by the panel's 更新 / 取消 buttons. */
 export interface CoordinateEditorHandle {
   apply: () => void;
   revert: () => void;
@@ -54,7 +54,7 @@ const buildLL = (rows: StrLL[]): LonLat[] | null => {
   return out;
 };
 
-/** True when the draft can be committed to a geometry. */
+/** True when the draft can be written to a geometry. */
 function isValid(s: PanelState): boolean {
   switch (s.kind) {
     case 'point':
@@ -95,14 +95,21 @@ function toPanel(feature: Feature): PanelState {
   }
 }
 
-/** A pair of lon/lat number inputs. */
+/** A pair of lon/lat inputs. Typing updates the draft; blur / Enter commits it. */
 function LonLatInputs({
   value,
   onChange,
+  onCommit,
 }: {
   value: StrLL;
   onChange: (axis: 'lon' | 'lat', v: string) => void;
+  onCommit: () => void;
 }): JSX.Element {
+  const onKey = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Enter') {
+      onCommit();
+    }
+  };
   return (
     <div className="coord-pair">
       <label className="coord-axis">
@@ -112,6 +119,8 @@ function LonLatInputs({
           inputMode="decimal"
           value={value.lon}
           onChange={(e) => onChange('lon', e.target.value)}
+          onBlur={onCommit}
+          onKeyDown={onKey}
         />
       </label>
       <label className="coord-axis">
@@ -121,6 +130,8 @@ function LonLatInputs({
           inputMode="decimal"
           value={value.lat}
           onChange={(e) => onChange('lat', e.target.value)}
+          onBlur={onCommit}
+          onKeyDown={onKey}
         />
       </label>
     </div>
@@ -133,6 +144,7 @@ function VertexTable({
   minPerRing,
   isPolygon,
   onChange,
+  onCommit,
   onAdd,
   onRemove,
 }: {
@@ -140,6 +152,7 @@ function VertexTable({
   minPerRing: number;
   isPolygon: boolean;
   onChange: (ri: number, vi: number, axis: 'lon' | 'lat', v: string) => void;
+  onCommit: () => void;
   onAdd: (ri: number) => void;
   onRemove: (ri: number, vi: number) => void;
 }): JSX.Element {
@@ -151,7 +164,11 @@ function VertexTable({
           {ring.map((v, vi) => (
             <div key={vi} className="coord-vertex">
               <span className="coord-index">{vi + 1}</span>
-              <LonLatInputs value={v} onChange={(axis, val) => onChange(ri, vi, axis, val)} />
+              <LonLatInputs
+                value={v}
+                onChange={(axis, val) => onChange(ri, vi, axis, val)}
+                onCommit={onCommit}
+              />
               <button
                 type="button"
                 className="coord-del"
@@ -183,12 +200,33 @@ export const CoordinateEditor = forwardRef<
   { feature: Feature; onDirtyChange?: (dirty: boolean, valid: boolean) => void }
 >(function CoordinateEditor({ feature, onDirtyChange }, ref): JSX.Element {
   const [state, setState] = useState<PanelState>(() => toPanel(feature));
-  // Guards the geometry 'change' we cause ourselves in apply() so it doesn't
-  // bounce back through the map-wins listener.
+  // Guards the geometry 'change' we cause ourselves so it doesn't bounce back
+  // through the map-wins listener and reformat the field being edited.
   const selfEdit = useRef(false);
 
   const report = (s: PanelState, dirty: boolean): void => {
     onDirtyChange?.(dirty, isValid(s));
+  };
+
+  const writeGeometry = (s: PanelState): void => {
+    const geom = feature.getGeometry();
+    switch (s.kind) {
+      case 'point':
+        writePoint(geom as Point, [parse(s.point.lon)!, parse(s.point.lat)!]);
+        break;
+      case 'circle':
+        writeCircleCenter(geom as CircleGeom, [parse(s.center.lon)!, parse(s.center.lat)!]);
+        writeCircleRadius(geom as CircleGeom, parse(s.radiusM)!);
+        break;
+      case 'line':
+        writeLine(geom as LineString, buildLL(s.coords)!);
+        break;
+      case 'polygon':
+        writePolygon(geom as Polygon, s.rings.map((r) => buildLL(r)!) as LonLat[][]);
+        break;
+      default:
+        break;
+    }
   };
 
   // Re-read when the selected feature changes.
@@ -199,8 +237,8 @@ export const CoordinateEditor = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feature]);
 
-  // Map-driven edits win: mirror geometry changes into the panel and drop any
-  // unapplied draft. Skips the change we cause ourselves in apply().
+  // Map-driven edits win: mirror geometry changes into the panel. Skips the
+  // change we cause ourselves when committing a field.
   useEffect(() => {
     const geom = feature.getGeometry();
     if (!geom) {
@@ -218,49 +256,41 @@ export const CoordinateEditor = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feature]);
 
-  // A user edit updates the draft only; the map/file change on 更新.
+  // Typing only updates the draft; the geometry changes on commit (blur/Enter).
   const edit = (s: PanelState): void => {
     setState(s);
     report(s, true);
+  };
+
+  // Commit a draft into the geometry (map reflects it live; still unsaved).
+  const commit = (s: PanelState): void => {
+    setState(s);
+    if (isValid(s)) {
+      selfEdit.current = true;
+      try {
+        writeGeometry(s);
+      } finally {
+        selfEdit.current = false;
+      }
+      report(s, false);
+    } else {
+      report(s, true);
+    }
   };
 
   useImperativeHandle(
     ref,
     () => ({
       apply: (): void => {
-        if (!isValid(state)) {
-          return;
-        }
-        selfEdit.current = true;
-        try {
-          const geom = feature.getGeometry();
-          switch (state.kind) {
-            case 'point':
-              writePoint(geom as Point, [parse(state.point.lon)!, parse(state.point.lat)!]);
-              break;
-            case 'circle':
-              writeCircleCenter(geom as CircleGeom, [
-                parse(state.center.lon)!,
-                parse(state.center.lat)!,
-              ]);
-              writeCircleRadius(geom as CircleGeom, parse(state.radiusM)!);
-              break;
-            case 'line':
-              writeLine(geom as LineString, buildLL(state.coords)!);
-              break;
-            case 'polygon':
-              writePolygon(
-                geom as Polygon,
-                state.rings.map((r) => buildLL(r)!) as LonLat[][]
-              );
-              break;
-            default:
-              break;
+        if (isValid(state)) {
+          selfEdit.current = true;
+          try {
+            writeGeometry(state);
+          } finally {
+            selfEdit.current = false;
           }
-        } finally {
-          selfEdit.current = false;
+          report(state, false);
         }
-        report(state, false);
       },
       revert: (): void => {
         const s = toPanel(feature);
@@ -268,7 +298,6 @@ export const CoordinateEditor = forwardRef<
         report(s, false);
       },
     }),
-    // Recreate so apply()/revert() see the latest draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state, feature]
   );
@@ -278,7 +307,7 @@ export const CoordinateEditor = forwardRef<
     const onChange = (axis: 'lon' | 'lat', v: string): void => {
       edit({ kind: 'point', point: { ...state.point, [axis]: v } });
     };
-    body = <LonLatInputs value={state.point} onChange={onChange} />;
+    body = <LonLatInputs value={state.point} onChange={onChange} onCommit={() => commit(state)} />;
   } else if (state.kind === 'circle') {
     const onCenter = (axis: 'lon' | 'lat', v: string): void => {
       edit({ ...state, center: { ...state.center, [axis]: v } });
@@ -286,10 +315,11 @@ export const CoordinateEditor = forwardRef<
     const onRadius = (v: string): void => {
       edit({ ...state, radiusM: v });
     };
+    const onCommit = (): void => commit(state);
     body = (
       <>
         <div className="coord-sub">中心</div>
-        <LonLatInputs value={state.center} onChange={onCenter} />
+        <LonLatInputs value={state.center} onChange={onCenter} onCommit={onCommit} />
         <label className="coord-axis coord-radius">
           <span>半径 (m)</span>
           <input
@@ -297,6 +327,12 @@ export const CoordinateEditor = forwardRef<
             inputMode="decimal"
             value={state.radiusM}
             onChange={(e) => onRadius(e.target.value)}
+            onBlur={onCommit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onCommit();
+              }
+            }}
           />
         </label>
       </>
@@ -307,13 +343,13 @@ export const CoordinateEditor = forwardRef<
     };
     const onAdd = (): void => {
       const last = state.coords[state.coords.length - 1] ?? { lon: '0', lat: '0' };
-      edit({ kind: 'line', coords: [...state.coords, { ...last }] });
+      commit({ kind: 'line', coords: [...state.coords, { ...last }] });
     };
     const onRemove = (_ri: number, vi: number): void => {
       if (state.coords.length <= 2) {
         return;
       }
-      edit({ kind: 'line', coords: state.coords.filter((_, i) => i !== vi) });
+      commit({ kind: 'line', coords: state.coords.filter((_, i) => i !== vi) });
     };
     body = (
       <VertexTable
@@ -321,6 +357,7 @@ export const CoordinateEditor = forwardRef<
         minPerRing={2}
         isPolygon={false}
         onChange={onChange}
+        onCommit={() => commit(state)}
         onAdd={onAdd}
         onRemove={onRemove}
       />
@@ -337,7 +374,7 @@ export const CoordinateEditor = forwardRef<
     const onAdd = (ri: number): void => {
       const ring = state.rings[ri];
       const last = ring[ring.length - 1] ?? { lon: '0', lat: '0' };
-      edit({
+      commit({
         kind: 'polygon',
         rings: state.rings.map((r, i) => (i === ri ? [...r, { ...last }] : r)),
       });
@@ -346,7 +383,7 @@ export const CoordinateEditor = forwardRef<
       if (state.rings[ri].length <= 3) {
         return;
       }
-      edit({
+      commit({
         kind: 'polygon',
         rings: state.rings.map((r, i) => (i === ri ? r.filter((_, j) => j !== vi) : r)),
       });
@@ -357,6 +394,7 @@ export const CoordinateEditor = forwardRef<
         minPerRing={3}
         isPolygon
         onChange={onChange}
+        onCommit={() => commit(state)}
         onAdd={onAdd}
         onRemove={onRemove}
       />

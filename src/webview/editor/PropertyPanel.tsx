@@ -40,12 +40,21 @@ function FieldInput({
   field,
   value,
   onChange,
+  onCommit,
 }: {
   field: FieldDef;
   value: FieldValue;
   onChange: (raw: FieldValue) => void;
+  onCommit: () => void;
 }): JSX.Element {
   const text = typeof value === 'string' ? value : '';
+  // Free-text fields commit on blur / Enter; checkbox and select are discrete
+  // and commit immediately via onChange.
+  const onKey = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Enter') {
+      onCommit();
+    }
+  };
   switch (field.type) {
     case 'boolean':
       return (
@@ -53,7 +62,13 @@ function FieldInput({
       );
     case 'number':
       return (
-        <input type="number" value={text} onChange={(e) => onChange(e.target.value)} />
+        <input
+          type="number"
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onCommit}
+          onKeyDown={onKey}
+        />
       );
     case 'enum':
       return (
@@ -67,7 +82,15 @@ function FieldInput({
         </select>
       );
     default:
-      return <input type="text" value={text} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onCommit}
+          onKeyDown={onKey}
+        />
+      );
   }
 }
 
@@ -104,10 +127,18 @@ export function PropertyPanel({
 
   const geomType = feature.getGeometry()?.getType() ?? '';
 
-  // Edits update the draft only; nothing reaches the map/file until 更新.
+  // Typing updates the draft; the value is written into the feature on commit
+  // (blur / Enter). Discrete controls (checkbox, select) commit immediately.
   const change = (f: FieldDef, raw: FieldValue): void => {
     setValues((v) => ({ ...v, [f.key]: raw }));
     setPropsDirty(true);
+    if (f.type === 'boolean' || f.type === 'enum') {
+      applyToFeature(feature, f, raw);
+    }
+  };
+
+  const commitField = (f: FieldDef): void => {
+    applyToFeature(feature, f, values[f.key] ?? '');
   };
 
   const dirty = propsDirty || coord.dirty || mapDirty;
@@ -127,7 +158,7 @@ export function PropertyPanel({
   };
 
   const revertAll = (): void => {
-    // Restore the geometry (map draft), then reset the panel drafts.
+    // Restore the feature's geometry + properties, then reset the panel display.
     onRevert();
     coordRef.current?.revert();
     setValues(readValues(feature, fields));
@@ -158,7 +189,12 @@ export function PropertyPanel({
             {fields.map((f) => (
               <label key={f.key} className="prop-row">
                 <span className="prop-label">{f.label ?? f.key}</span>
-                <FieldInput field={f} value={values[f.key] ?? ''} onChange={(raw) => change(f, raw)} />
+                <FieldInput
+                  field={f}
+                  value={values[f.key] ?? ''}
+                  onChange={(raw) => change(f, raw)}
+                  onCommit={() => commitField(f)}
+                />
               </label>
             ))}
             <button type="button" className="prop-settings" onClick={onOpenSettings}>

@@ -54,6 +54,7 @@ export class MapController {
   // the last-committed geometry used to revert on 取消 / deselect.
   private selectedFeature: Feature | null = null;
   private committedGeom: Geometry | null = null;
+  private committedProps: Record<string, unknown> | null = null;
   private editDirty = false;
   private reverting = false;
   private committing = false;
@@ -172,10 +173,11 @@ export class MapController {
 
     // Switching tools ends the current selection; discard its uncommitted draft.
     if (this.selectedFeature && this.editDirty && !this.applyingRemote) {
-      this.revertGeometry(this.selectedFeature);
+      this.revertFeature(this.selectedFeature);
     }
     this.selectedFeature = null;
     this.committedGeom = null;
+    this.committedProps = null;
     this.setEditDirty(false);
 
     if (tool === 'modify') {
@@ -288,6 +290,7 @@ export class MapController {
     this.committing = true;
     try {
       this.committedGeom = this.selectedFeature.getGeometry()?.clone() ?? null;
+      this.committedProps = this.snapshotProps(this.selectedFeature);
     } finally {
       this.committing = false;
     }
@@ -295,10 +298,10 @@ export class MapController {
     this.syncNow();
   }
 
-  /** Discard the selected feature's uncommitted map edits (revert to snapshot). */
+  /** Discard the selected feature's uncommitted edits (revert to snapshot). */
   revertEdit(): void {
     if (this.selectedFeature) {
-      this.revertGeometry(this.selectedFeature);
+      this.revertFeature(this.selectedFeature);
     }
   }
 
@@ -306,29 +309,46 @@ export class MapController {
   private onSelectionSwitched(next: Feature | null): void {
     if (this.selectedFeature && this.selectedFeature !== next && this.editDirty && !this.applyingRemote) {
       // Leaving a feature (deselect / switch) discards its uncommitted edits.
-      this.revertGeometry(this.selectedFeature);
+      this.revertFeature(this.selectedFeature);
     }
     this.selectedFeature = next;
     this.committedGeom = next?.getGeometry()?.clone() ?? null;
+    this.committedProps = next ? this.snapshotProps(next) : null;
     this.setEditDirty(false);
   }
 
-  /** Copy the committed geometry back into the live feature (no host sync). */
-  private revertGeometry(feature: Feature): void {
-    const snap = this.committedGeom;
-    const geom = feature.getGeometry();
-    if (!snap || !geom) {
-      return;
-    }
+  /** Feature properties (excluding geometry) as a plain snapshot. */
+  private snapshotProps(feature: Feature): Record<string, unknown> {
+    const props = { ...feature.getProperties() };
+    delete props.geometry;
+    return props;
+  }
+
+  /** Restore the committed geometry and properties into the live feature. */
+  private revertFeature(feature: Feature): void {
     this.reverting = true;
     try {
-      if (geom instanceof CircleGeom && snap instanceof CircleGeom) {
-        geom.setCenterAndRadius(snap.getCenter(), snap.getRadius());
-      } else {
-        const coords = (snap as SimpleGeometry).getCoordinates();
-        if (coords) {
-          (geom as SimpleGeometry).setCoordinates(coords);
+      const snap = this.committedGeom;
+      const geom = feature.getGeometry();
+      if (snap && geom) {
+        if (geom instanceof CircleGeom && snap instanceof CircleGeom) {
+          geom.setCenterAndRadius(snap.getCenter(), snap.getRadius());
+        } else {
+          const coords = (snap as SimpleGeometry).getCoordinates();
+          if (coords) {
+            (geom as SimpleGeometry).setCoordinates(coords);
+          }
         }
+      }
+      if (this.committedProps) {
+        const committed = this.committedProps;
+        // Drop keys added since the snapshot, then restore the committed values.
+        for (const k of Object.keys(feature.getProperties())) {
+          if (k !== 'geometry' && !(k in committed)) {
+            feature.unset(k, true);
+          }
+        }
+        feature.setProperties({ ...committed }, true);
       }
     } finally {
       this.reverting = false;
