@@ -25,9 +25,9 @@ class BufferSource implements Source {
 }
 
 /**
- * Load the bundled world.pmtiles and build a basemap layer styled to match the
- * MapLibre demotiles vector style (colored countries, coastline, boundaries,
- * graticule, country labels) for the given webview resource URI.
+ * Load the bundled world.pmtiles and build a basemap layer from the demotiles
+ * vector tiles (neutral country fill, coastline, boundaries, country labels;
+ * graticule hidden) for the given webview resource URI.
  */
 export async function createBasemapLayer(pmtilesUri: string): Promise<VectorTileLayer> {
   const resp = await fetch(pmtilesUri);
