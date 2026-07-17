@@ -67,6 +67,7 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
           mapDirty={mapDirty}
           onCommit={() => controllerRef.current?.commitEdit()}
           onRevert={() => controllerRef.current?.revertEdit()}
+          onHighlight={(coord) => controllerRef.current?.setHighlightVertex(coord)}
           onOpenSettings={() => vscode.postMessage({ type: 'openFieldSettings' })}
         />
       )}

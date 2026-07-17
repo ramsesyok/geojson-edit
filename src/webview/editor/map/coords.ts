@@ -88,3 +88,27 @@ export function writeCircleCenter(geom: CircleGeom, center: LonLat): void {
 export function writeCircleRadius(geom: CircleGeom, meters: number): void {
   geom.setRadius(metersToProjectedRadius(meters, geom.getCenter()));
 }
+
+/**
+ * Map-projection (EPSG:3857) coordinate of the vertex a panel field refers to.
+ * ri/vi are ignored for Point (the point) and Circle (its center).
+ */
+export function vertexCoordinate(
+  geom: Geometry | undefined,
+  ri: number,
+  vi: number
+): Coordinate | null {
+  if (geom instanceof Point) {
+    return geom.getCoordinates();
+  }
+  if (geom instanceof CircleGeom) {
+    return geom.getCenter();
+  }
+  if (geom instanceof LineString) {
+    return geom.getCoordinates()[vi] ?? null;
+  }
+  if (geom instanceof Polygon) {
+    return geom.getCoordinates()[ri]?.[vi] ?? null;
+  }
+  return null;
+}

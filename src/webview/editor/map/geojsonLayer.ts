@@ -118,6 +118,22 @@ export function selectedStyle(feature: FeatureLike): Style[] {
   return isPoint ? [highlight] : [highlight, vertexHandleStyle];
 }
 
+// Bright marker drawn on the focused vertex whose coordinate field is active.
+const focusedVertexStyle = new Style({
+  image: new CircleStyle({
+    radius: 8,
+    fill: new Fill({ color: 'rgba(255, 213, 0, 0.9)' }),
+    stroke: new Stroke({ color: HIGHLIGHT, width: 2.5 }),
+  }),
+});
+
+/** A thin overlay layer that highlights a single vertex (see MapController). */
+export function createHighlightLayer(): { layer: VectorLayer; source: VectorSource } {
+  const source = new VectorSource();
+  const layer = new VectorLayer({ source, style: focusedVertexStyle, zIndex: 10 });
+  return { layer, source };
+}
+
 /**
  * A GeoJSON Point whose properties carry a numeric `radius` is treated as a
  * circle (our storage convention for OL Circle geometries).
