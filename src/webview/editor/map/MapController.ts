@@ -1,6 +1,7 @@
 import Map from 'ol/Map';
 import View from 'ol/View';
 import Feature from 'ol/Feature';
+import Point from 'ol/geom/Point';
 import { fromLonLat } from 'ol/proj';
 import Draw from 'ol/interaction/Draw';
 import Modify from 'ol/interaction/Modify';
@@ -19,8 +20,15 @@ import type Geometry from 'ol/geom/Geometry';
 import type SimpleGeometry from 'ol/geom/SimpleGeometry';
 import type BaseEvent from 'ol/events/Event';
 import type { EventsKey } from 'ol/events';
+import type { Coordinate } from 'ol/coordinate';
 import { createBasemapLayer } from './basemap';
-import { createGeojsonLayer, loadGeojsonText, selectedStyle, serializeGeojson } from './geojsonLayer';
+import {
+  createGeojsonLayer,
+  createHighlightLayer,
+  loadGeojsonText,
+  selectedStyle,
+  serializeGeojson,
+} from './geojsonLayer';
 import { vscode } from '../vscodeApi';
 
 export type Tool = 'modify' | 'Point' | 'LineString' | 'Polygon' | 'Circle' | 'delete';
@@ -35,6 +43,7 @@ export class MapController {
   private readonly map: Map;
   private readonly overlayLayer: VectorLayer;
   private readonly source: VectorSource;
+  private readonly highlightSource: VectorSource;
   private readonly sourceKeys: EventsKey[];
 
   private dynamicInteractions: Interaction[] = [];
@@ -69,9 +78,12 @@ export class MapController {
     this.overlayLayer = layer;
     this.source = source;
 
+    const highlight = createHighlightLayer();
+    this.highlightSource = highlight.source;
+
     this.map = new Map({
       target,
-      layers: [layer],
+      layers: [layer, highlight.layer],
       view: new View({ center: fromLonLat([0, 20]), zoom: 2, maxZoom: 18 }),
     });
 
@@ -178,6 +190,7 @@ export class MapController {
     this.selectedFeature = null;
     this.committedGeom = null;
     this.committedProps = null;
+    this.setHighlightVertex(null);
     this.setEditDirty(false);
 
     if (tool === 'modify') {
@@ -280,6 +293,14 @@ export class MapController {
     this.map.setTarget(undefined);
   }
 
+  /** Highlight a single vertex (in map projection) whose field is focused. */
+  setHighlightVertex(coord: Coordinate | null): void {
+    this.highlightSource.clear();
+    if (coord) {
+      this.highlightSource.addFeature(new Feature(new Point(coord)));
+    }
+  }
+
   // --- Deferred editing of the selected feature ------------------------------
 
   /** Commit the selected feature's draft (map + panel edits) and sync to host. */
@@ -314,6 +335,7 @@ export class MapController {
     this.selectedFeature = next;
     this.committedGeom = next?.getGeometry()?.clone() ?? null;
     this.committedProps = next ? this.snapshotProps(next) : null;
+    this.setHighlightVertex(null);
     this.setEditDirty(false);
   }
 

@@ -4,9 +4,11 @@ import type Point from 'ol/geom/Point';
 import type CircleGeom from 'ol/geom/Circle';
 import type LineString from 'ol/geom/LineString';
 import type Polygon from 'ol/geom/Polygon';
+import type { Coordinate } from 'ol/coordinate';
 import { unByKey } from 'ol/Observable';
 import {
   readCoords,
+  vertexCoordinate,
   writeCircleCenter,
   writeCircleRadius,
   writeLine,
@@ -95,42 +97,53 @@ function toPanel(feature: Feature): PanelState {
   }
 }
 
-/** A pair of lon/lat inputs. Typing updates the draft; blur / Enter commits it. */
+/**
+ * A lat/lon pair (latitude first, matching Japanese convention). Typing updates
+ * the draft; blur / Enter commits it. Focus toggles the map vertex highlight.
+ */
 function LonLatInputs({
   value,
   onChange,
   onCommit,
+  onActive,
 }: {
   value: StrLL;
   onChange: (axis: 'lon' | 'lat', v: string) => void;
   onCommit: () => void;
+  onActive: (active: boolean) => void;
 }): JSX.Element {
   const onKey = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter') {
       onCommit();
     }
   };
+  const onBlur = (): void => {
+    onCommit();
+    onActive(false);
+  };
   return (
     <div className="coord-pair">
-      <label className="coord-axis">
-        <span>経度</span>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={value.lon}
-          onChange={(e) => onChange('lon', e.target.value)}
-          onBlur={onCommit}
-          onKeyDown={onKey}
-        />
-      </label>
       <label className="coord-axis">
         <span>緯度</span>
         <input
           type="text"
           inputMode="decimal"
           value={value.lat}
+          onFocus={() => onActive(true)}
           onChange={(e) => onChange('lat', e.target.value)}
-          onBlur={onCommit}
+          onBlur={onBlur}
+          onKeyDown={onKey}
+        />
+      </label>
+      <label className="coord-axis">
+        <span>経度</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={value.lon}
+          onFocus={() => onActive(true)}
+          onChange={(e) => onChange('lon', e.target.value)}
+          onBlur={onBlur}
           onKeyDown={onKey}
         />
       </label>
@@ -145,6 +158,7 @@ function VertexTable({
   isPolygon,
   onChange,
   onCommit,
+  onActive,
   onAdd,
   onRemove,
 }: {
@@ -153,6 +167,7 @@ function VertexTable({
   isPolygon: boolean;
   onChange: (ri: number, vi: number, axis: 'lon' | 'lat', v: string) => void;
   onCommit: () => void;
+  onActive: (ri: number, vi: number, active: boolean) => void;
   onAdd: (ri: number) => void;
   onRemove: (ri: number, vi: number) => void;
 }): JSX.Element {
@@ -168,6 +183,7 @@ function VertexTable({
                 value={v}
                 onChange={(axis, val) => onChange(ri, vi, axis, val)}
                 onCommit={onCommit}
+                onActive={(active) => onActive(ri, vi, active)}
               />
               <button
                 type="button"
@@ -197,15 +213,32 @@ function VertexTable({
 
 export const CoordinateEditor = forwardRef<
   CoordinateEditorHandle,
-  { feature: Feature; onDirtyChange?: (dirty: boolean, valid: boolean) => void }
->(function CoordinateEditor({ feature, onDirtyChange }, ref): JSX.Element {
+  {
+    feature: Feature;
+    onDirtyChange?: (dirty: boolean, valid: boolean) => void;
+    onHighlight?: (coord: Coordinate | null) => void;
+  }
+>(function CoordinateEditor({ feature, onDirtyChange, onHighlight }, ref): JSX.Element {
   const [state, setState] = useState<PanelState>(() => toPanel(feature));
   // Guards the geometry 'change' we cause ourselves so it doesn't bounce back
   // through the map-wins listener and reformat the field being edited.
   const selfEdit = useRef(false);
+  // The vertex whose coordinate field currently has focus (for the highlight).
+  const focused = useRef<{ ri: number; vi: number } | null>(null);
 
   const report = (s: PanelState, dirty: boolean): void => {
     onDirtyChange?.(dirty, isValid(s));
+  };
+
+  // Highlight (or clear) the map vertex a focused field refers to.
+  const setActive = (ri: number, vi: number, active: boolean): void => {
+    if (active) {
+      focused.current = { ri, vi };
+      onHighlight?.(vertexCoordinate(feature.getGeometry(), ri, vi));
+    } else {
+      focused.current = null;
+      onHighlight?.(null);
+    }
   };
 
   const writeGeometry = (s: PanelState): void => {
@@ -229,11 +262,12 @@ export const CoordinateEditor = forwardRef<
     }
   };
 
-  // Re-read when the selected feature changes.
+  // Re-read when the selected feature changes; drop the highlight on unmount.
   useEffect(() => {
     const s = toPanel(feature);
     setState(s);
     report(s, false);
+    return () => onHighlight?.(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feature]);
 
@@ -273,6 +307,10 @@ export const CoordinateEditor = forwardRef<
         selfEdit.current = false;
       }
       report(s, false);
+      // Keep the highlight on the vertex we just moved.
+      if (focused.current) {
+        onHighlight?.(vertexCoordinate(feature.getGeometry(), focused.current.ri, focused.current.vi));
+      }
     } else {
       report(s, true);
     }
@@ -307,7 +345,14 @@ export const CoordinateEditor = forwardRef<
     const onChange = (axis: 'lon' | 'lat', v: string): void => {
       edit({ kind: 'point', point: { ...state.point, [axis]: v } });
     };
-    body = <LonLatInputs value={state.point} onChange={onChange} onCommit={() => commit(state)} />;
+    body = (
+      <LonLatInputs
+        value={state.point}
+        onChange={onChange}
+        onCommit={() => commit(state)}
+        onActive={(a) => setActive(0, 0, a)}
+      />
+    );
   } else if (state.kind === 'circle') {
     const onCenter = (axis: 'lon' | 'lat', v: string): void => {
       edit({ ...state, center: { ...state.center, [axis]: v } });
@@ -319,15 +364,24 @@ export const CoordinateEditor = forwardRef<
     body = (
       <>
         <div className="coord-sub">中心</div>
-        <LonLatInputs value={state.center} onChange={onCenter} onCommit={onCommit} />
+        <LonLatInputs
+          value={state.center}
+          onChange={onCenter}
+          onCommit={onCommit}
+          onActive={(a) => setActive(0, 0, a)}
+        />
         <label className="coord-axis coord-radius">
           <span>半径 (m)</span>
           <input
             type="text"
             inputMode="decimal"
             value={state.radiusM}
+            onFocus={() => setActive(0, 0, true)}
             onChange={(e) => onRadius(e.target.value)}
-            onBlur={onCommit}
+            onBlur={() => {
+              onCommit();
+              setActive(0, 0, false);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 onCommit();
@@ -358,6 +412,7 @@ export const CoordinateEditor = forwardRef<
         isPolygon={false}
         onChange={onChange}
         onCommit={() => commit(state)}
+        onActive={(ri, vi, a) => setActive(ri, vi, a)}
         onAdd={onAdd}
         onRemove={onRemove}
       />
@@ -395,6 +450,7 @@ export const CoordinateEditor = forwardRef<
         isPolygon
         onChange={onChange}
         onCommit={() => commit(state)}
+        onActive={(ri, vi, a) => setActive(ri, vi, a)}
         onAdd={onAdd}
         onRemove={onRemove}
       />

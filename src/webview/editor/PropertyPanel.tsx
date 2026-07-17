@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type Feature from 'ol/Feature';
+import type { Coordinate } from 'ol/coordinate';
 import type { FieldDef } from './vscodeApi';
 import { CoordinateEditor } from './CoordinateEditor';
 import type { CoordinateEditorHandle } from './CoordinateEditor';
@@ -100,6 +101,7 @@ export function PropertyPanel({
   mapDirty,
   onCommit,
   onRevert,
+  onHighlight,
   onOpenSettings,
 }: {
   feature: Feature;
@@ -107,6 +109,7 @@ export function PropertyPanel({
   mapDirty: boolean;
   onCommit: () => void;
   onRevert: () => void;
+  onHighlight: (coord: Coordinate | null) => void;
   onOpenSettings: () => void;
 }): JSX.Element {
   const [values, setValues] = useState<Record<string, FieldValue>>(() =>
@@ -176,6 +179,7 @@ export function PropertyPanel({
           ref={coordRef}
           feature={feature}
           onDirtyChange={(d, v) => setCoord({ dirty: d, valid: v })}
+          onHighlight={onHighlight}
         />
         {fields.length === 0 ? (
           <div className="prop-empty">
