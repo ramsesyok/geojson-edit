@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type Feature from 'ol/Feature';
 import { MapController } from './map/MapController';
 import type { Tool } from './map/MapController';
@@ -7,6 +7,18 @@ import { PropertyPanel } from './PropertyPanel';
 import { vscode } from './vscodeApi';
 import type { FieldDef, HostToWebview } from './vscodeApi';
 
+// Always-available fields, independent of the workspace `geojson-edit.fields`
+// setting: `name` labels the feature on the map, `color` (hex) tints it.
+const BUILTIN_FIELDS: FieldDef[] = [
+  { key: 'name', type: 'string', label: '名称' },
+  { key: 'color', type: 'color', label: '色' },
+];
+
+function withBuiltinFields(fields: FieldDef[]): FieldDef[] {
+  const defined = new Set(fields.map((f) => f.key));
+  return [...BUILTIN_FIELDS.filter((b) => !defined.has(b.key)), ...fields];
+}
+
 export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<MapController | null>(null);
@@ -14,6 +26,8 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
   const [mapDirty, setMapDirty] = useState(false);
   const [fields, setFields] = useState<FieldDef[]>([]);
+  // Stable identity so the panel's field effect doesn't re-run every render.
+  const panelFields = useMemo(() => withBuiltinFields(fields), [fields]);
 
   // Create the map + controller once.
   useEffect(() => {
@@ -63,7 +77,7 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
       {editing && selectedFeature && (
         <PropertyPanel
           feature={selectedFeature}
-          fields={fields}
+          fields={panelFields}
           mapDirty={mapDirty}
           onCommit={() => controllerRef.current?.commitEdit()}
           onRevert={() => controllerRef.current?.revertEdit()}

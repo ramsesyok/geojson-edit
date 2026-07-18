@@ -186,6 +186,7 @@ body,
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
+  border-top: 1px solid #2b2f3a;
   border-bottom: 1px solid #2b2f3a;
 }
 
@@ -344,6 +345,48 @@ body,
   width: 16px;
   height: 16px;
   align-self: flex-start;
+}
+
+.prop-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prop-color input[type='color'] {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  background: #23262f;
+  cursor: pointer;
+}
+
+.prop-color-hex {
+  flex: 1 1 auto;
+  font: 12px/1 ui-monospace, monospace;
+  color: #a9b1c0;
+}
+
+.prop-color-clear {
+  flex: 0 0 auto;
+  font: 12px/1.2 sans-serif;
+  color: #d7dae0;
+  background: #23262f;
+  border: 1px solid #333844;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.prop-color-clear:hover:not(:disabled) {
+  background: #2c303b;
+}
+
+.prop-color-clear:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .prop-empty {

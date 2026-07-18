@@ -114,7 +114,7 @@ export class GeojsonEditorProvider implements vscode.CustomTextEditorProvider {
       (f): f is FieldDef =>
         !!f &&
         typeof f.key === 'string' &&
-        ['string', 'number', 'boolean', 'enum'].includes(f.type)
+        ['string', 'number', 'boolean', 'enum', 'color'].includes(f.type)
     );
   }
 

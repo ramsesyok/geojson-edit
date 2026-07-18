@@ -82,6 +82,27 @@ function FieldInput({
           ))}
         </select>
       );
+    case 'color': {
+      const isHex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text);
+      return (
+        <div className="prop-color">
+          <input
+            type="color"
+            value={isHex ? text : '#1565c0'}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <span className="prop-color-hex">{text || '(既定)'}</span>
+          <button
+            type="button"
+            className="prop-color-clear"
+            disabled={text === ''}
+            onClick={() => onChange('')}
+          >
+            クリア
+          </button>
+        </div>
+      );
+    }
     default:
       return (
         <input
@@ -135,7 +156,7 @@ export function PropertyPanel({
   const change = (f: FieldDef, raw: FieldValue): void => {
     setValues((v) => ({ ...v, [f.key]: raw }));
     setPropsDirty(true);
-    if (f.type === 'boolean' || f.type === 'enum') {
+    if (f.type === 'boolean' || f.type === 'enum' || f.type === 'color') {
       applyToFeature(feature, f, raw);
     }
   };
@@ -168,6 +189,24 @@ export function PropertyPanel({
     setPropsDirty(false);
   };
 
+  const fieldRow = (f: FieldDef): JSX.Element => (
+    <label key={f.key} className="prop-row">
+      <span className="prop-label">{f.label ?? f.key}</span>
+      <FieldInput
+        field={f}
+        value={values[f.key] ?? ''}
+        onChange={(raw) => change(f, raw)}
+        onCommit={() => commitField(f)}
+      />
+    </label>
+  );
+
+  // Panel order: name, color, coordinates, then any custom fields.
+  const nameField = fields.find((f) => f.key === 'name');
+  const colorField = fields.find((f) => f.key === 'color');
+  const topFields = [nameField, colorField].filter((f): f is FieldDef => !!f);
+  const customFields = fields.filter((f) => f.key !== 'name' && f.key !== 'color');
+
   return (
     <div className="prop-panel">
       <div className="prop-header">
@@ -175,37 +214,19 @@ export function PropertyPanel({
         <span className="prop-geom">{geomType}</span>
       </div>
       <div className="prop-body">
+        {topFields.length > 0 && <div className="prop-fields">{topFields.map(fieldRow)}</div>}
         <CoordinateEditor
           ref={coordRef}
           feature={feature}
           onDirtyChange={(d, v) => setCoord({ dirty: d, valid: v })}
           onHighlight={onHighlight}
         />
-        {fields.length === 0 ? (
-          <div className="prop-empty">
-            <p>編集できるフィールドが未定義です。</p>
-            <button type="button" onClick={onOpenSettings}>
-              フィールド設定を開く
-            </button>
-          </div>
-        ) : (
-          <div className="prop-fields">
-            {fields.map((f) => (
-              <label key={f.key} className="prop-row">
-                <span className="prop-label">{f.label ?? f.key}</span>
-                <FieldInput
-                  field={f}
-                  value={values[f.key] ?? ''}
-                  onChange={(raw) => change(f, raw)}
-                  onCommit={() => commitField(f)}
-                />
-              </label>
-            ))}
-            <button type="button" className="prop-settings" onClick={onOpenSettings}>
-              フィールド設定を開く
-            </button>
-          </div>
-        )}
+        <div className="prop-fields">
+          {customFields.map(fieldRow)}
+          <button type="button" className="prop-settings" onClick={onOpenSettings}>
+            フィールド設定を開く
+          </button>
+        </div>
       </div>
       <div className="prop-actions">
         <span className={dirty ? 'prop-status dirty' : 'prop-status'}>
