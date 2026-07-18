@@ -63,7 +63,8 @@
                   "string",
                   "number",
                   "boolean",
-                  "enum"
+                  "enum",
+                  "color"
                 ],
                 "default": "string",
                 "description": "入力の種類"

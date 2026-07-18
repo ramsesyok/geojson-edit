@@ -82,6 +82,27 @@ function FieldInput({
           ))}
         </select>
       );
+    case 'color': {
+      const isHex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text);
+      return (
+        <div className="prop-color">
+          <input
+            type="color"
+            value={isHex ? text : '#1565c0'}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <span className="prop-color-hex">{text || '(既定)'}</span>
+          <button
+            type="button"
+            className="prop-color-clear"
+            disabled={text === ''}
+            onClick={() => onChange('')}
+          >
+            クリア
+          </button>
+        </div>
+      );
+    }
     default:
       return (
         <input
@@ -135,7 +156,7 @@ export function PropertyPanel({
   const change = (f: FieldDef, raw: FieldValue): void => {
     setValues((v) => ({ ...v, [f.key]: raw }));
     setPropsDirty(true);
-    if (f.type === 'boolean' || f.type === 'enum') {
+    if (f.type === 'boolean' || f.type === 'enum' || f.type === 'color') {
       applyToFeature(feature, f, raw);
     }
   };

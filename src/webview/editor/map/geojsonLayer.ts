@@ -10,10 +10,12 @@ import MultiPoint from 'ol/geom/MultiPoint';
 import MultiLineString from 'ol/geom/MultiLineString';
 import MultiPolygon from 'ol/geom/MultiPolygon';
 import { fromLonLat, toLonLat } from 'ol/proj';
+import { getCenter } from 'ol/extent';
 import Style from 'ol/style/Style';
 import Stroke from 'ol/style/Stroke';
 import Fill from 'ol/style/Fill';
 import CircleStyle from 'ol/style/Circle';
+import Text from 'ol/style/Text';
 import type { FeatureLike } from 'ol/Feature';
 import type Geometry from 'ol/geom/Geometry';
 import type { Coordinate } from 'ol/coordinate';
@@ -29,39 +31,102 @@ const round = (n: number, decimals: number): number => {
   return Math.round(n * f) / f;
 };
 
-// Blue-family colors for drawn features: visible on the light (pastel)
-// demotiles basemap and clearly distinct from the red-orange selection
-// highlight (#ff3d00).
-const pointStyle = new Style({
-  image: new CircleStyle({
-    radius: 6,
-    fill: new Fill({ color: '#1565c0' }),
-    stroke: new Stroke({ color: '#ffffff', width: 2 }),
-  }),
-});
-const lineStyle = new Style({ stroke: new Stroke({ color: '#1976d2', width: 3 }) });
-const polygonStyle = new Style({
-  stroke: new Stroke({ color: '#0d47a1', width: 2.5 }),
-  fill: new Fill({ color: 'rgba(13, 71, 161, 0.18)' }),
-});
-const circleStyle = new Style({
-  stroke: new Stroke({ color: '#0277bd', width: 2.5 }),
-  fill: new Fill({ color: 'rgba(2, 119, 189, 0.15)' }),
-});
+// Default blue-family colors for drawn features (used when a feature has no
+// `color` property): visible on the light demotiles basemap and distinct from
+// the red-orange selection highlight (#ff3d00).
+const DEFAULT_POINT = '#1565c0';
+const DEFAULT_LINE = '#1976d2';
+const DEFAULT_POLYGON = '#0d47a1';
+const DEFAULT_CIRCLE = '#0277bd';
 
-function styleFn(feature: FeatureLike): Style {
-  switch (feature.getGeometry()?.getType()) {
+/** A feature's `color` property, if it is a valid #rgb / #rrggbb hex. */
+function featureColor(feature: FeatureLike): string | null {
+  const v = feature.get('color');
+  return typeof v === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v.trim())
+    ? v.trim()
+    : null;
+}
+
+/** A feature's `name` property, if it is a non-empty string. */
+function featureName(feature: FeatureLike): string | null {
+  const v = feature.get('name');
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  let h = hex.slice(1);
+  if (h.length === 3) {
+    h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  }
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Geometry style using the feature's `color` (or the per-type default). */
+function geometryStyle(type: string | undefined, color: string | null): Style {
+  switch (type) {
     case 'Point':
     case 'MultiPoint':
-      return pointStyle;
+      return new Style({
+        image: new CircleStyle({
+          radius: 6,
+          fill: new Fill({ color: color ?? DEFAULT_POINT }),
+          stroke: new Stroke({ color: '#ffffff', width: 2 }),
+        }),
+      });
     case 'LineString':
     case 'MultiLineString':
-      return lineStyle;
+      return new Style({ stroke: new Stroke({ color: color ?? DEFAULT_LINE, width: 3 }) });
     case 'Circle':
-      return circleStyle;
+      return new Style({
+        stroke: new Stroke({ color: color ?? DEFAULT_CIRCLE, width: 2.5 }),
+        fill: new Fill({ color: color ? hexToRgba(color, 0.15) : 'rgba(2, 119, 189, 0.15)' }),
+      });
     default:
-      return polygonStyle;
+      return new Style({
+        stroke: new Stroke({ color: color ?? DEFAULT_POLYGON, width: 2.5 }),
+        fill: new Fill({ color: color ? hexToRgba(color, 0.18) : 'rgba(13, 71, 161, 0.18)' }),
+      });
   }
+}
+
+/** A Point at the geometry's label anchor (point / center / mid / interior). */
+function labelGeometry(geom: Geometry | undefined): Point | undefined {
+  if (geom instanceof Point) return geom;
+  if (geom instanceof CircleGeom) return new Point(geom.getCenter());
+  if (geom instanceof LineString) return new Point(geom.getCoordinateAt(0.5));
+  if (geom instanceof Polygon) return new Point(geom.getInteriorPoint().getCoordinates().slice(0, 2));
+  if (geom) return new Point(getCenter(geom.getExtent()));
+  return undefined;
+}
+
+/** Text style that draws `name` at the geometry's label anchor. */
+function labelStyle(type: string | undefined, name: string): Style {
+  const above = type === 'Point' || type === 'MultiPoint';
+  return new Style({
+    text: new Text({
+      text: name,
+      font: '600 12px "Segoe UI", sans-serif',
+      fill: new Fill({ color: '#12203a' }),
+      stroke: new Stroke({ color: '#ffffff', width: 3 }),
+      overflow: true,
+      offsetY: above ? -14 : 0,
+    }),
+    geometry: (f) => labelGeometry((f as Feature).getGeometry()),
+    zIndex: 100,
+  });
+}
+
+function styleFn(feature: FeatureLike): Style[] {
+  const type = feature.getGeometry()?.getType();
+  const styles = [geometryStyle(type, featureColor(feature))];
+  const name = featureName(feature);
+  if (name) {
+    styles.push(labelStyle(type, name));
+  }
+  return styles;
 }
 
 export function createGeojsonLayer(): { layer: VectorLayer; source: VectorSource } {
@@ -115,7 +180,14 @@ export function selectedStyle(feature: FeatureLike): Style[] {
       : undefined,
   });
   // Points are already drawn as a dot; only add vertex handles for lines/areas.
-  return isPoint ? [highlight] : [highlight, vertexHandleStyle];
+  const styles = isPoint ? [highlight] : [highlight, vertexHandleStyle];
+  // Keep the name label visible while editing (the custom color is not — the
+  // highlight takes over until the feature is deselected).
+  const name = featureName(feature);
+  if (name) {
+    styles.push(labelStyle(type, name));
+  }
+  return styles;
 }
 
 // Bright marker drawn on the focused vertex whose coordinate field is active.
