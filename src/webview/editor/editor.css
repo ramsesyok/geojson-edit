@@ -20,39 +20,172 @@ body,
   background: #d8f2ff;
 }
 
-.toolbar {
+/* --- Left panel: add + feature list -------------------------------------- */
+
+.feature-panel {
   position: absolute;
   top: 8px;
   left: 8px;
+  bottom: 8px;
   z-index: 10;
+  width: 240px;
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(20, 22, 28, 0.9);
+  flex-direction: column;
+  font: 13px/1.4 sans-serif;
+  color: #d7dae0;
+  background: rgba(20, 22, 28, 0.95);
   border: 1px solid #2b2f3a;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
 }
 
-.toolbar .tool {
+.fp-section {
+  position: relative;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2b2f3a;
+}
+
+.fp-add-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   font: 13px/1.2 sans-serif;
-  color: #d7dae0;
-  background: #23262f;
-  border: 1px solid #333844;
+  color: #ffffff;
+  background: #3b6fd4;
+  border: 1px solid #5b8def;
   border-radius: 4px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   cursor: pointer;
+}
+
+.fp-add-toggle:hover {
+  background: #4a7ce0;
+}
+
+.fp-add-toggle.active {
+  background: #2c7a4b;
+  border-color: #3fa06a;
+}
+
+.fp-caret {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.fp-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.fp-menu {
+  position: absolute;
+  z-index: 21;
+  top: calc(100% - 4px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: #23262f;
+  border: 1px solid #3a4150;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.fp-menu-item {
+  text-align: left;
+  font: 13px/1.2 sans-serif;
+  color: #eef1f6;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.fp-menu-item:hover {
+  background: #34506f;
+}
+
+.fp-list-header {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  color: #8b93a3;
+}
+
+.fp-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Top padding keeps the first item's selection outline from being clipped. */
+  padding: 6px 8px 8px;
+}
+
+.fp-empty {
+  padding: 8px 4px;
+  font-size: 12px;
+  color: #8b93a3;
+}
+
+.fp-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fp-item:hover {
+  background: #23262f;
+}
+
+.fp-item.selected {
+  background: #2c3550;
+  outline: 1px solid #5b8def;
+}
+
+.fp-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.toolbar .tool:hover {
-  background: #2c303b;
+.fp-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.toolbar .tool.active {
+.fp-edit {
+  color: #b9c1cf;
+}
+
+.fp-edit:hover {
   color: #ffffff;
-  background: #3b6fd4;
-  border-color: #5b8def;
+  background: #333844;
+}
+
+.fp-del {
+  color: #ff6b6b;
+}
+
+.fp-del:hover {
+  color: #ffffff;
+  background: #b23b3b;
 }
 
 .status-badge {
@@ -73,7 +206,7 @@ body,
 
 .prop-panel {
   position: absolute;
-  top: 52px;
+  top: 8px;
   right: 8px;
   bottom: 8px;
   z-index: 10;

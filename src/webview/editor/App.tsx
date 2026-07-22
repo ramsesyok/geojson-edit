@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type Feature from 'ol/Feature';
 import { MapController } from './map/MapController';
 import type { Tool } from './map/MapController';
-import { Toolbar } from './Toolbar';
+import { FeaturePanel } from './FeaturePanel';
 import { PropertyPanel } from './PropertyPanel';
 import { vscode } from './vscodeApi';
 import type { FieldDef, HostToWebview } from './vscodeApi';
@@ -24,6 +24,7 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
   const controllerRef = useRef<MapController | null>(null);
   const [tool, setTool] = useState<Tool>('modify');
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [features, setFeatures] = useState<Feature[]>([]);
   const [mapDirty, setMapDirty] = useState(false);
   const [fields, setFields] = useState<FieldDef[]>([]);
   // Stable identity so the panel's field effect doesn't re-run every render.
@@ -35,7 +36,14 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
     if (!target) {
       return;
     }
-    const controller = new MapController(target, pmtilesUri, setSelectedFeature, setMapDirty);
+    const controller = new MapController(
+      target,
+      pmtilesUri,
+      setSelectedFeature,
+      setMapDirty,
+      setFeatures,
+      () => setTool('modify')
+    );
     controllerRef.current = controller;
 
     const onMessage = (ev: MessageEvent): void => {
@@ -67,10 +75,17 @@ export function App({ pmtilesUri }: { pmtilesUri: string }): JSX.Element {
 
   return (
     <>
-      <Toolbar tool={tool} onToolChange={setTool} />
+      <FeaturePanel
+        features={features}
+        selected={selectedFeature}
+        activeTool={tool}
+        onAdd={(type) => setTool(type)}
+        onSelect={(f) => controllerRef.current?.requestSelect(f, true)}
+        onDelete={(f) => controllerRef.current?.deleteFeature(f)}
+      />
       {editing && (
         <div className="status-badge">
-          ✏️ 編集中 — Shift+ドラッグで移動 / Alt+クリックで頂点削除 / Esc・空白クリックで解除
+          ✏️ 編集中 — Shift+ドラッグで移動 / Alt+クリックで頂点削除 / Delete で削除 / Esc で解除
         </div>
       )}
       <div ref={mapDivRef} className="map" />

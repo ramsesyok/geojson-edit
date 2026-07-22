@@ -31,7 +31,7 @@ import {
 } from './geojsonLayer';
 import { vscode } from '../vscodeApi';
 
-export type Tool = 'modify' | 'Point' | 'LineString' | 'Polygon' | 'Circle' | 'delete';
+export type Tool = 'modify' | 'Point' | 'LineString' | 'Polygon' | 'Circle';
 
 const SYNC_DEBOUNCE_MS = 300;
 
@@ -68,11 +68,19 @@ export class MapController {
   private reverting = false;
   private committing = false;
 
+  // A feature to select once the modify tool is (re)built — used after drawing
+  // and when picking from the feature list.
+  private pendingSelect: Feature | null = null;
+  private pendingPan = false;
+  private listTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor(
     target: HTMLElement,
     pmtilesUri: string,
     private readonly onSelectionChange?: (feature: Feature | null) => void,
-    private readonly onEditDirtyChange?: (dirty: boolean) => void
+    private readonly onEditDirtyChange?: (dirty: boolean) => void,
+    private readonly onFeaturesChange?: (features: Feature[]) => void,
+    private readonly onRequestModifyTool?: () => void
   ) {
     const { layer, source } = createGeojsonLayer();
     this.overlayLayer = layer;
@@ -118,6 +126,15 @@ export class MapController {
       const features = this.currentSelect?.getFeatures();
       if (features && features.getLength() > 0) {
         features.clear();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      const selected = this.currentSelect?.getFeatures().item(0) as Feature | undefined;
+      if (selected) {
+        this.deleteFeature(selected);
         e.preventDefault();
       }
       return;
@@ -232,18 +249,12 @@ export class MapController {
       this.map.addInteraction(modify);
       this.map.addInteraction(snap); // Snap must be added last to take effect.
       this.dynamicInteractions = [select, translate, modify, snap];
-    } else if (tool === 'delete') {
-      this.clickKey = this.map.on('click', (ev) => {
-        const hit = this.map.forEachFeatureAtPixel(ev.pixel, (f) => f, {
-          layerFilter: (l) => l === this.overlayLayer,
-          hitTolerance: 6,
-        });
-        if (hit) {
-          this.source.removeFeature(hit as Feature);
-        }
-      });
+      // Select a feature queued while another tool was active (draw / list pick).
+      this.flushPendingSelect();
     } else {
       const draw = new Draw({ source: this.source, type: tool });
+      // After drawing one feature, select it and return to the edit tool.
+      draw.on('drawend', (e) => this.requestSelect(e.feature as Feature, false));
       const snap = new Snap({ source: this.source });
       this.map.addInteraction(draw);
       this.map.addInteraction(snap);
@@ -275,6 +286,8 @@ export class MapController {
         this.hasFitted = true;
       }
     }
+
+    this.notifyFeatures();
   }
 
   dispose(): void {
@@ -282,6 +295,9 @@ export class MapController {
     window.removeEventListener('keydown', this.onKeyDown);
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
+    }
+    if (this.listTimer) {
+      clearTimeout(this.listTimer);
     }
     if (this.clickKey) {
       unByKey(this.clickKey);
@@ -299,6 +315,74 @@ export class MapController {
     if (coord) {
       this.highlightSource.addFeature(new Feature(new Point(coord)));
     }
+  }
+
+  // --- Feature list / selection from the left panel --------------------------
+
+  /** Select a feature (after drawing or from the list), switching to the edit
+   *  tool if needed and optionally panning to it. */
+  requestSelect(feature: Feature, pan: boolean): void {
+    this.pendingSelect = feature;
+    this.pendingPan = pan;
+    if (this.currentSelect) {
+      this.flushPendingSelect();
+    } else {
+      this.onRequestModifyTool?.();
+    }
+  }
+
+  private flushPendingSelect(): void {
+    const feature = this.pendingSelect;
+    this.pendingSelect = null;
+    if (!feature || !this.currentSelect) {
+      return;
+    }
+    const selected = this.currentSelect.getFeatures();
+    selected.clear();
+    selected.push(feature);
+    if (this.pendingPan) {
+      this.panToFeature(feature);
+    }
+    this.pendingPan = false;
+  }
+
+  /** Remove a feature (from the list, or Delete on the selected one). */
+  deleteFeature(feature: Feature): void {
+    if (feature === this.selectedFeature) {
+      // Drop the draft bookkeeping so deselect doesn't revert a removed feature.
+      this.selectedFeature = null;
+      this.committedGeom = null;
+      this.committedProps = null;
+      this.setHighlightVertex(null);
+      this.setEditDirty(false);
+    }
+    this.currentSelect?.getFeatures().remove(feature);
+    if (this.source.hasFeature(feature)) {
+      this.source.removeFeature(feature);
+    }
+  }
+
+  private panToFeature(feature: Feature): void {
+    const extent = feature.getGeometry()?.getExtent();
+    if (extent && !isEmpty(extent)) {
+      // Cap the zoom: the low-detail basemap is unreadable when zoomed in far.
+      this.map.getView().fit(extent, { padding: [60, 60, 60, 60], maxZoom: 6, duration: 300 });
+    }
+  }
+
+  private notifyFeatures(): void {
+    if (this.listTimer) {
+      clearTimeout(this.listTimer);
+      this.listTimer = undefined;
+    }
+    this.onFeaturesChange?.(this.source.getFeatures().slice());
+  }
+
+  private scheduleListRefresh(): void {
+    if (this.listTimer) {
+      clearTimeout(this.listTimer);
+    }
+    this.listTimer = setTimeout(() => this.notifyFeatures(), 200);
   }
 
   // --- Deferred editing of the selected feature ------------------------------
@@ -376,6 +460,7 @@ export class MapController {
       this.reverting = false;
     }
     this.setEditDirty(false);
+    this.notifyFeatures();
   }
 
   private setEditDirty(dirty: boolean): void {
@@ -389,6 +474,12 @@ export class MapController {
     const e = evt as unknown as VectorSourceEvent;
     if (this.applyingRemote || this.reverting) {
       return; // remote load or our own revert — never echo
+    }
+    // Membership changes refresh the list now; edits (name label) can lag.
+    if (e.type === 'addfeature' || e.type === 'removefeature') {
+      this.notifyFeatures();
+    } else {
+      this.scheduleListRefresh();
     }
     if (e.type === 'changefeature' && e.feature === this.selectedFeature && !this.committing) {
       // A draft edit of the selected feature: hold the sync until 更新.
