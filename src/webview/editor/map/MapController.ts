@@ -365,7 +365,8 @@ export class MapController {
   private panToFeature(feature: Feature): void {
     const extent = feature.getGeometry()?.getExtent();
     if (extent && !isEmpty(extent)) {
-      this.map.getView().fit(extent, { padding: [60, 60, 60, 60], maxZoom: 16, duration: 300 });
+      // Cap the zoom: the low-detail basemap is unreadable when zoomed in far.
+      this.map.getView().fit(extent, { padding: [60, 60, 60, 60], maxZoom: 6, duration: 300 });
     }
   }
 
