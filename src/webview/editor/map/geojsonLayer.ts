@@ -151,38 +151,92 @@ function vertexCoordinates(geom: Geometry | undefined): Coordinate[] {
   return [];
 }
 
+// ● handles at every vertex; a neutral ring so they read on any feature color.
 const vertexHandleStyle = new Style({
   image: new CircleStyle({
     radius: 5,
     fill: new Fill({ color: '#ffffff' }),
-    stroke: new Stroke({ color: HIGHLIGHT, width: 2 }),
+    stroke: new Stroke({ color: '#1a1a1a', width: 2 }),
   }),
   geometry: (feature: FeatureLike) =>
     new MultiPoint(vertexCoordinates((feature as Feature).getGeometry())),
 });
 
+const EDIT_DASH = [8, 6];
+
+function defaultColor(type: string | undefined): string {
+  switch (type) {
+    case 'Point':
+    case 'MultiPoint':
+      return DEFAULT_POINT;
+    case 'LineString':
+    case 'MultiLineString':
+      return DEFAULT_LINE;
+    case 'Circle':
+      return DEFAULT_CIRCLE;
+    default:
+      return DEFAULT_POLYGON;
+  }
+}
+
 /**
- * Style for a selected (being-edited) feature: a bright highlight of the
- * geometry plus ● handles at every vertex.
+ * Geometry portion of the editing style: the feature's own `color`, but with a
+ * dashed stroke so "being edited" is obvious while the real color stays visible.
+ * A point (no line to dash) gets a dashed ring around its marker.
+ */
+function editGeometryStyles(type: string | undefined, color: string | null): Style[] {
+  const c = color ?? defaultColor(type);
+  switch (type) {
+    case 'Point':
+    case 'MultiPoint':
+      return [
+        new Style({
+          image: new CircleStyle({
+            radius: 6,
+            fill: new Fill({ color: c }),
+            stroke: new Stroke({ color: '#ffffff', width: 2 }),
+          }),
+        }),
+        new Style({
+          image: new CircleStyle({
+            radius: 10,
+            stroke: new Stroke({ color: c, width: 2, lineDash: [3, 3] }),
+          }),
+        }),
+      ];
+    case 'LineString':
+    case 'MultiLineString':
+      return [new Style({ stroke: new Stroke({ color: c, width: 3, lineDash: EDIT_DASH }) })];
+    case 'Circle':
+      return [
+        new Style({
+          stroke: new Stroke({ color: c, width: 2.5, lineDash: EDIT_DASH }),
+          fill: new Fill({ color: color ? hexToRgba(color, 0.15) : 'rgba(2, 119, 189, 0.15)' }),
+        }),
+      ];
+    default:
+      return [
+        new Style({
+          stroke: new Stroke({ color: c, width: 2.5, lineDash: EDIT_DASH }),
+          fill: new Fill({ color: color ? hexToRgba(color, 0.18) : 'rgba(13, 71, 161, 0.18)' }),
+        }),
+      ];
+  }
+}
+
+/**
+ * Style for a selected (being-edited) feature: its real `color` drawn with a
+ * dashed stroke to signal editing, plus ● handles at every vertex and the name
+ * label. Drawing the real color lets color edits show immediately while editing.
  */
 export function selectedStyle(feature: FeatureLike): Style[] {
   const type = feature.getGeometry()?.getType();
   const isPoint = type === 'Point' || type === 'MultiPoint';
-  const highlight = new Style({
-    stroke: new Stroke({ color: HIGHLIGHT, width: 3 }),
-    fill: new Fill({ color: 'rgba(255, 61, 0, 0.15)' }),
-    image: isPoint
-      ? new CircleStyle({
-          radius: 7,
-          fill: new Fill({ color: HIGHLIGHT }),
-          stroke: new Stroke({ color: '#ffffff', width: 2 }),
-        })
-      : undefined,
-  });
-  // Points are already drawn as a dot; only add vertex handles for lines/areas.
-  const styles = isPoint ? [highlight] : [highlight, vertexHandleStyle];
-  // Keep the name label visible while editing (the custom color is not — the
-  // highlight takes over until the feature is deselected).
+  const styles = editGeometryStyles(type, featureColor(feature));
+  // Points already draw a dot; only lines / areas get vertex handles.
+  if (!isPoint) {
+    styles.push(vertexHandleStyle);
+  }
   const name = featureName(feature);
   if (name) {
     styles.push(labelStyle(type, name));
